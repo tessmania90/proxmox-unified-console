@@ -95,3 +95,29 @@
         </div>
     </div>
 </div>
+<!-- NEU: PASSWORT ÄNDERN MODAL -->
+<div id="passwordModal" class="fixed inset-0 bg-black/80 hidden z-[100] flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-darkcard border border-darkborder rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
+        <div class="p-5 border-b border-darkborder flex justify-between items-center bg-darkbg">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">🔑 Passwort ändern</h2>
+            <button onclick="closePasswordModal()" class="text-gray-400 hover:text-white transition-colors text-xl">✕</button>
+        </div>
+        <div class="p-6">
+            <form id="changePasswordForm" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Aktuelles Passwort</label>
+                    <input type="password" id="oldPassword" class="w-full bg-darkbg border border-darkborder rounded p-2 text-white text-sm focus:border-proxmox" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Neues Passwort</label>
+                    <input type="password" id="newPassword" class="w-full bg-darkbg border border-darkborder rounded p-2 text-white text-sm focus:border-proxmox" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Neues Passwort bestätigen</label>
+                    <input type="password" id="newPasswordConfirm" class="w-full bg-darkbg border border-darkborder rounded p-2 text-white text-sm focus:border-proxmox" required>
+                </div>
+                <button type="submit" class="w-full bg-proxmox hover:bg-orange-600 text-white font-bold py-2.5 rounded mt-2 transition-colors">Passwort aktualisieren</button>
+            </form>
+        </div>
+    </div>
+</div>

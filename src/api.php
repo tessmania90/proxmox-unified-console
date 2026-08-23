@@ -33,6 +33,29 @@ if ($action === 'logout') {
 
 if (!isset($_SESSION['user_id'])) { echo json_encode(['success' => false, 'error' => 'Zugriff verweigert.']); exit; }
 
+// === NEU: PASSWORT ÄNDERN ===
+if ($action === 'change_password') {
+    $oldPass = $_POST['old_password'] ?? '';
+    $newPass = $_POST['new_password'] ?? '';
+    $userId = $_SESSION['user_id'];
+    
+    $stmt = $pdo->prepare("SELECT password_hash FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($user && password_verify($oldPass, $user['password_hash'])) {
+        if(strlen($newPass) < 4) { echo json_encode(['success' => false, 'error' => 'Passwort muss mindestens 4 Zeichen lang sein.']); exit; }
+        $newHash = password_hash($newPass, PASSWORD_DEFAULT);
+        $uStmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+        $uStmt->execute([$newHash, $userId]);
+        logAudit('Passwort geändert', 'Self-Service');
+        echo json_encode(['success' => true]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Das alte Passwort ist falsch.']);
+    }
+    exit;
+}
+
 $isAdmin = ($_SESSION['role'] ?? '') === 'admin';
 session_write_close(); 
 
@@ -62,7 +85,6 @@ function checkVmPermission($pdo, $vmid) {
     $stmt = $pdo->prepare("SELECT permissions FROM users WHERE id = ?"); $stmt->execute([$userId]); return in_array($vmid, json_decode($stmt->fetchColumn(), true)['allowed_vms'] ?? []);
 }
 
-// === AUDIT LOG ENDPUNKT ===
 if ($action === 'get_audit_logs') {
     if (!$isAdmin) exit;
     $stmt = $pdo->query("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 200");

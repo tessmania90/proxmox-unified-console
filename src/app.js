@@ -24,6 +24,34 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         }
     }
 
+    // === NEU: PASSWORT ÄNDERN LOGIK ===
+    const pwdModal = document.getElementById('passwordModal');
+    window.openPasswordModal = function() { if(pwdModal) { pwdModal.classList.remove('hidden'); document.getElementById('changePasswordForm').reset(); } }
+    window.closePasswordModal = function() { if(pwdModal) pwdModal.classList.add('hidden'); }
+
+    const pwdForm = document.getElementById('changePasswordForm');
+    if(pwdForm) {
+        pwdForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const oldP = document.getElementById('oldPassword').value;
+            const newP = document.getElementById('newPassword').value;
+            const confirmP = document.getElementById('newPasswordConfirm').value;
+
+            if (newP !== confirmP) { alert('Die neuen Passwörter stimmen nicht überein!'); return; }
+
+            const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Speichere...';
+            const fd = new FormData(); fd.append('old_password', oldP); fd.append('new_password', newP);
+
+            try {
+                const res = await (await fetch('api.php?action=change_password', {method: 'POST', body: fd})).json();
+                if(res.success) {
+                    alert('Passwort erfolgreich geändert! Bitte neu anmelden.');
+                    closePasswordModal(); logout();
+                } else { alert(res.error || 'Fehler beim Ändern des Passworts.'); }
+            } catch(err) { alert('Netzwerkfehler.'); } finally { btn.innerText = oTxt; }
+        });
+    }
+
     window.switchTab = function(tab) {
         ['pve', 'pbs', 'pmg'].forEach(t => { const el = document.getElementById('tab-' + t); const nav = document.getElementById('nav-tab-' + t); if (t === tab) { el.classList.remove('hidden'); setTimeout(() => el.classList.remove('opacity-0'), 50); nav.classList.add('tab-active' + (t === 'pve' ? '' : '-' + t)); } else { el.classList.add('hidden', 'opacity-0'); nav.classList.remove('tab-active', 'tab-active-pbs', 'tab-active-pmg'); } });
         if(tab === 'pbs') fetchPbsStats(); if(tab === 'pmg') fetchPmgStats();
@@ -537,7 +565,7 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     window.toggleCronJob = async function(id, newState) { const fd = new FormData(); fd.append('id', id); fd.append('is_active', newState); await fetch('api.php?action=toggle_cron_job', {method: 'POST', body: fd}); loadCronJobs(); }
     window.deleteCronJob = async function(id) { if(!confirm('Diesen geplanten Job wirklich löschen?')) return; const fd = new FormData(); fd.append('id', id); await fetch('api.php?action=delete_cron_job', {method: 'POST', body: fd}); loadCronJobs(); }
 
-    // === NEU: AUDIT LOG ===
+    // === AUDIT LOG ===
     const auditModal = document.getElementById('auditLogModal');
     window.openAuditLog = async function() {
         auditModal.classList.remove('hidden');
@@ -549,18 +577,10 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                 tbody.innerHTML = '';
                 if(res.data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="text-center text-gray-500 py-4">Noch keine Einträge.</td></tr>'; return; }
                 res.data.forEach(log => {
-                    // Konvertiere SQLite DATETIME in lokales deutsches Format
                     const d = new Date(log.timestamp + 'Z'); 
                     const timeStr = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE');
                     const isSystem = log.username === 'System';
-                    
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-darkcard/50 transition-colors border-b border-darkborder/50">
-                            <td class="px-4 py-3 text-gray-400 whitespace-nowrap text-xs">${timeStr}</td>
-                            <td class="px-4 py-3"><span class="${isSystem ? 'text-gray-500' : 'text-blue-400 font-bold'}">${log.username}</span></td>
-                            <td class="px-4 py-3 font-bold text-white">${log.action}</td>
-                            <td class="px-4 py-3 text-gray-300 text-xs">${log.target || '-'}</td>
-                        </tr>`;
+                    tbody.innerHTML += `<tr class="hover:bg-darkcard/50 transition-colors border-b border-darkborder/50"><td class="px-4 py-3 text-gray-400 whitespace-nowrap text-xs">${timeStr}</td><td class="px-4 py-3"><span class="${isSystem ? 'text-gray-500' : 'text-blue-400 font-bold'}">${log.username}</span></td><td class="px-4 py-3 font-bold text-white">${log.action}</td><td class="px-4 py-3 text-gray-300 text-xs">${log.target || '-'}</td></tr>`;
                 });
             }
         } catch(e) { tbody.innerHTML = '<tr><td colspan="4" class="text-center text-red-500 py-4">Fehler beim Laden.</td></tr>'; }
