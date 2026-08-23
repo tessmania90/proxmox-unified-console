@@ -1,4 +1,5 @@
 <?php
+// /home/docker/pve_dashboard/src/index.php
 require_once 'db.php';
 $isLoggedIn = isset($_SESSION['user_id']);
 $stmt = $pdo->query("SELECT COUNT(*) FROM nodes");
@@ -37,6 +38,13 @@ $nodeCount = $stmt->fetchColumn();
             <?php if ($isLoggedIn): ?>
                 <div class="flex items-center gap-4 text-sm">
                     <span class="text-gray-400">Hallo, <span class="text-white font-bold"><?= htmlspecialchars($_SESSION['username']) ?></span></span>
+                    
+                    <!-- HIER IST DER SCHLÜSSEL BUTTON -->
+                    <button onclick="openPasswordModal()" class="text-gray-400 hover:text-white transition-colors" title="Passwort ändern">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4v-3.286l5.742-5.742C9.4 11.135 9 10.126 9 9a6 6 0 0112 0z"></path></svg>
+                    </button>
+                    <!-- ============================ -->
+
                     <button onclick="logout()" class="text-red-400 hover:text-red-300 font-medium transition-colors">Abmelden</button>
                 </div>
             <?php else: ?>
@@ -109,7 +117,6 @@ $nodeCount = $stmt->fetchColumn();
         <?php endif; ?>
     </main>
 
-    <!-- FOOTER MIT TESSMANN.DEV -->
     <footer class="bg-darkcard border-t border-darkborder py-4 mt-auto z-10 w-full">
         <div class="max-w-[1600px] w-full mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-2 text-xs text-gray-500">
             <div>
