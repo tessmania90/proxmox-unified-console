@@ -11,7 +11,10 @@ if (!window.APP.isLoggedIn) {
     if(setupForm) { setupForm.addEventListener('submit', async function(e) { e.preventDefault(); const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Verbinde...'; const fd = new FormData(); fd.append('name', document.getElementById('nodeName').value); fd.append('ip', document.getElementById('nodeIp').value); fd.append('user', document.getElementById('nodeUser').value); fd.append('pass', document.getElementById('nodePass').value); fd.append('type', 'pve'); try { const res = await (await fetch('api.php?action=add_node', { method: 'POST', body: fd })).json(); if(res.success) { btn.innerText = 'Erfolgreich!'; setTimeout(() => window.location.reload(), 1000); } else { alert(res.error); btn.innerText = oTxt; } } catch (e) { alert('Netzwerkfehler.'); btn.innerText = oTxt; } }); }
 }
 
-async function logout() { await fetch('api.php?action=logout'); window.location.reload(); }
+async function logout() { 
+    await fetch('api.php?action=logout'); 
+    window.location.href = window.location.pathname + '?t=' + Date.now(); 
+}
 
 if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     

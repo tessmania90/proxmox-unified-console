@@ -38,32 +38,45 @@ Built entirely with native APIs—no slow iframes, no CORS issues.
 
 ---
 
-## 📦 Quickstart (Docker)
+## 📦 Quickstart (Docker & Portainer)
 
-Deploying the Proxmox Unified Console is incredibly easy using Docker.
+Die Installation erfolgt am einfachsten über Docker Compose. Die Applikation bringt einen eigenen Apache-Webserver mit und generiert sich automatisch ein SSL-Zertifikat für HTTPS.
 
-1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/tessmania90/proxmox-unified-console.git](https://github.com/tessmania90/proxmox-unified-console.git)
-   cd proxmox-unified-console
+**1. `docker-compose.yml` anlegen:**
+```yaml
+version: '3.8'
 
-    Start the container:
-    Bash
+services:
+  pve-dashboard:
+    image: stessmann/proxmox-unified-console:latest
+    container_name: puc_dashboard
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "8443:443" 
+    volumes:
+      - ./data:/var/www/data
+    environment:
+      - TZ=Europe/Berlin
 
-    docker compose up -d --build
+2. Starten:
+Bash
 
-    Access the Dashboard:
-    Open your browser and navigate to:
-    https://<YOUR-SERVER-IP>:8443
-    (Note: You will need to accept the self-signed certificate warning).
+docker compose up -d
 
-    Default Login:
+3. ⚠️ WICHTIG: Rechte für SQLite anpassen:
+Da der Container als Benutzer www-data (UID 33) läuft, der neu erstellte Volume-Ordner auf dem Host aber oft root gehört, muss dem Ordner die Schreibberechtigung erteilt werden. Führe im Verzeichnis der Compose-Datei aus:
+Bash
 
-        Username: admin
+sudo chown -R 33:33 ./data
+sudo chmod -R 775 ./data
 
-        Password: admin
+4. Login:
+Rufe https://<DEINE-IP>:8443 in deinem Browser auf (Zertifikatswarnung ignorieren).
 
-    ⚠️ IMPORTANT: Please change the default password immediately after your first login!
+    Benutzername: admin
+
+    Passwort: admin (Bitte direkt nach dem Einloggen oben rechts über das 🔑-Symbol ändern!)
 
 🛠️ Architecture
 
