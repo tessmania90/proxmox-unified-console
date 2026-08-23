@@ -1,19 +1,27 @@
 <?php
 // /home/docker/pve_dashboard/src/api.php
+ini_set('display_errors', 0); // Verhindert, dass PHP-Warnungen das JSON zerstören!
+error_reporting(E_ALL);
+
 require_once 'db.php';
 header('Content-Type: application/json');
 $action = $_GET['action'] ?? '';
 
-// === ZENTRALE AUDIT LOG FUNKTION ===
+// === ZENTRALE AUDIT LOG FUNKTION (Jetzt kugelsicher!) ===
 function logAudit($actionName, $target = '') {
     global $pdo;
-    @session_start();
-    $userId = $_SESSION['user_id'] ?? 0;
-    $username = $_SESSION['username'] ?? 'System';
-    session_write_close();
-    
-    $stmt = $pdo->prepare("INSERT INTO audit_logs (user_id, username, action, target) VALUES (?, ?, ?, ?)");
-    $stmt->execute([$userId, $username, $actionName, $target]);
+    try {
+        @session_start();
+        $userId = $_SESSION['user_id'] ?? 0;
+        $username = $_SESSION['username'] ?? 'System';
+        @session_write_close();
+        
+        $stmt = $pdo->prepare("INSERT INTO audit_logs (user_id, username, action, target) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$userId, $username, $actionName, $target]);
+    } catch (Throwable $e) {
+        // Fehler im Logbuch ignorieren, damit das Dashboard nicht crasht!
+        error_log("Audit Log Fehler: " . $e->getMessage());
+    }
 }
 
 if ($action === 'login') {
@@ -21,7 +29,8 @@ if ($action === 'login') {
     $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?"); $stmt->execute([$username]); $user = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($user && password_verify($password, $user['password_hash'])) {
         $_SESSION['user_id'] = $user['id']; $_SESSION['username'] = $user['username']; $_SESSION['role'] = $user['role'];
-        logAudit('User Login', 'IP: ' . $_SERVER['REMOTE_ADDR']);
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+        logAudit('User Login', 'IP: ' . $ip);
         echo json_encode(['success' => true]);
     } else echo json_encode(['success' => false, 'error' => 'Login fehlgeschlagen.']);
     exit;
@@ -33,7 +42,7 @@ if ($action === 'logout') {
 
 if (!isset($_SESSION['user_id'])) { echo json_encode(['success' => false, 'error' => 'Zugriff verweigert.']); exit; }
 
-// === NEU: PASSWORT ÄNDERN ===
+// === PASSWORT ÄNDERN ===
 if ($action === 'change_password') {
     $oldPass = $_POST['old_password'] ?? '';
     $newPass = $_POST['new_password'] ?? '';
@@ -57,7 +66,7 @@ if ($action === 'change_password') {
 }
 
 $isAdmin = ($_SESSION['role'] ?? '') === 'admin';
-session_write_close(); 
+@session_write_close(); 
 
 function getProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $type = 'pve', $method = "GET", $postData = null, $timeout = 4) {
     $port = ($type === 'pbs') ? 8007 : 8006;
@@ -81,7 +90,7 @@ function getProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $type = 'pve', $
 
 function checkVmPermission($pdo, $vmid) {
     global $isAdmin; if ($isAdmin) return true; 
-    @session_start(); $userId = $_SESSION['user_id'] ?? 0; session_write_close();
+    @session_start(); $userId = $_SESSION['user_id'] ?? 0; @session_write_close();
     $stmt = $pdo->prepare("SELECT permissions FROM users WHERE id = ?"); $stmt->execute([$userId]); return in_array($vmid, json_decode($stmt->fetchColumn(), true)['allowed_vms'] ?? []);
 }
 
