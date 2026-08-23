@@ -24,6 +24,12 @@ RUN sed -i 's/ssl-cert-snakeoil.pem/apache-selfsigned.crt/g' /etc/apache2/sites-
 # SSL Site in Apache aktivieren
 RUN a2ensite default-ssl.conf
 
+# === DAS HIER HAT GEFEHLT! ===
+# Kopiere den PHP/JS Quellcode fest in das Image und setze die Rechte
+COPY ./src /var/www/html/
+RUN chown -R www-data:www-data /var/www/html/
+# =============================
+
 # Cronjob einrichten (Ruft die cron.php minütlich auf und leitet Output ins Docker-Log um)
 RUN echo "* * * * * root /usr/local/bin/php /var/www/html/cron.php > /proc/1/fd/1 2>/proc/1/fd/2\n" >> /etc/crontab
 
