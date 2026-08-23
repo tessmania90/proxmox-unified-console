@@ -1,0 +1,20 @@
+# /home/docker/pve_dashboard/docker-compose.yml
+version: '3.8'
+
+services:
+  pve-dashboard:
+    build: .
+    container_name: pve_unified_console
+    restart: unless-stopped
+    ports:
+      # Port 80 bleibt fürs Testing / HAProxy
+      - "8080:80"
+      # NEU: Port 443 für sicheres NoVNC! (Wir mappen es nach außen z.B. auf 8443)
+      - "8443:443"
+    volumes:
+      # Dein Source-Code
+      - ./src:/var/www/html
+      # Deine Datenbank, sicher ausgelagert
+      - ./data:/var/www/data
+    environment:
+      - TZ=Europe/Berlin

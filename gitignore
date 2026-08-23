@@ -1,0 +1,4 @@
+# /home/docker/pve_dashboard/.gitignore
+data/*
+!data/.gitkeep
+.DS_Store
