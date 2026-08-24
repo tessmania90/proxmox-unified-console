@@ -1,6 +1,6 @@
 <?php
 // /home/docker/pve_dashboard/src/api.php
-ini_set('display_errors', 0); // Verhindert, dass PHP-Warnungen das JSON zerstören
+ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
 require_once 'db.php';
@@ -60,7 +60,6 @@ if (!isset($_SESSION['user_id'])) {
     exit; 
 }
 
-// === PASSWORT ÄNDERN ===
 if ($action === 'change_password') {
     $oldPass = $_POST['old_password'] ?? '';
     $newPass = $_POST['new_password'] ?? '';
@@ -86,11 +85,9 @@ if ($action === 'change_password') {
 $isAdmin = ($_SESSION['role'] ?? '') === 'admin';
 @session_write_close(); 
 
-// === PROXMOX API FETCHER (JETZT MIT TICKET-AUTH FÜR ALLE SYSTEME) ===
 function getProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $type = 'pve', $method = "GET", $postData = null, $timeout = 6) {
     $port = ($type === 'pbs') ? 8007 : 8006;
     
-    // 1. Ticket holen (Login)
     $chAuth = curl_init("https://{$ip}:{$port}/api2/json/access/ticket");
     curl_setopt_array($chAuth, [
         CURLOPT_RETURNTRANSFER => true, 
@@ -107,7 +104,6 @@ function getProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $type = 'pve', $
         return ['data' => null, 'error' => 'Authentifizierung fehlgeschlagen'];
     }
 
-    // 2. Passendes Cookie für das System wählen
     $cookieName = 'PVEAuthCookie';
     if ($type === 'pbs') $cookieName = 'PBSAuthCookie';
     if ($type === 'pmg') $cookieName = 'PMGAuthCookie';
@@ -117,7 +113,6 @@ function getProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $type = 'pve', $
         "CSRFPreventionToken: " . $authRes['data']['CSRFPreventionToken']
     ];
 
-    // 3. Eigentlichen API-Call ausführen
     $ch = curl_init("https://{$ip}:{$port}{$endpoint}");
     $options = [
         CURLOPT_RETURNTRANSFER => true, 

@@ -25,7 +25,17 @@ if ($action === 'get_top_vms') {
     $stmt = $pdo->query("SELECT * FROM nodes WHERE type = 'pve'"); $nodes = $stmt->fetchAll(PDO::FETCH_ASSOC); $allVms = [];
     foreach ($nodes as $node) {
         $vms = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/cluster/resources?type=vm");
-        if (isset($vms['data'])) { foreach ($vms['data'] as $vm) { if (checkVmPermission($pdo, $vm['vmid'])) { $vm['node_id'] = $node['id']; $vm['node_ip'] = $node['ip_address']; $allVms[] = $vm; } } }
+        if (isset($vms['data'])) { 
+            foreach ($vms['data'] as $vm) { 
+                if (checkVmPermission($pdo, $vm['vmid'])) { 
+                    $vm['node_id'] = $node['id']; 
+                    $vm['node_ip'] = $node['ip_address']; 
+                    // MAGISCHER FIX: PVE nennt den Host "node"
+                    $vm['host'] = $vm['node'] ?? 'unknown'; 
+                    $allVms[] = $vm; 
+                } 
+            } 
+        }
     }
     usort($allVms, function($a, $b) { return ($b['cpu'] ?? 0) <=> ($a['cpu'] ?? 0); });
     echo json_encode(['success' => true, 'data' => array_slice($allVms, 0, 5)]); exit;
@@ -35,7 +45,17 @@ if ($action === 'get_all_vms') {
     $stmt = $pdo->query("SELECT * FROM nodes WHERE type = 'pve'"); $nodes = $stmt->fetchAll(PDO::FETCH_ASSOC); $allVms = [];
     foreach ($nodes as $node) {
         $vms = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/cluster/resources?type=vm");
-        if (isset($vms['data'])) { foreach ($vms['data'] as $vm) { if (checkVmPermission($pdo, $vm['vmid'])) { $vm['node_id'] = $node['id']; $vm['node_ip'] = $node['ip_address']; $allVms[] = $vm; } } }
+        if (isset($vms['data'])) { 
+            foreach ($vms['data'] as $vm) { 
+                if (checkVmPermission($pdo, $vm['vmid'])) { 
+                    $vm['node_id'] = $node['id']; 
+                    $vm['node_ip'] = $node['ip_address']; 
+                    // MAGISCHER FIX
+                    $vm['host'] = $vm['node'] ?? 'unknown'; 
+                    $allVms[] = $vm; 
+                } 
+            } 
+        }
     }
     usort($allVms, function($a, $b) { if ($a['status'] === 'running' && $b['status'] !== 'running') return -1; if ($a['status'] !== 'running' && $b['status'] === 'running') return 1; return $a['vmid'] <=> $b['vmid']; });
     echo json_encode(['success' => true, 'data' => $allVms]); exit;
@@ -45,8 +65,6 @@ if ($action === 'vm_action') {
     if (!checkVmPermission($pdo, $_POST['vmid'])) exit;
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_POST['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
     $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/status/{$_POST['cmd']}", "POST");
-    
-    // AUDIT LOG
     logAudit("VM {$_POST['cmd']}", "VMID: {$_POST['vmid']} auf Host: {$_POST['host']}");
     echo json_encode(['success' => isset($res['data']), 'error' => $res['errors'] ?? 'Fehler']); exit;
 }
