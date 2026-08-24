@@ -2,7 +2,6 @@
 // /home/docker/pve_dashboard/src/cron.php
 require_once __DIR__ . '/db.php';
 
-// Hilfsfunktion: Prüft, ob ein Cron-Ausdruck (z.B. "0 3 * * *") zur aktuellen Zeit passt
 function isCronMatch($cron, $time = null) {
     if ($time === null) $time = time();
     $cronParts = explode(' ', trim($cron));
@@ -20,14 +19,14 @@ function isCronMatch($cron, $time = null) {
 function matchCronPart($part, $current) {
     if ($part === '*') return true;
     if ($part === (string)(int)$current) return true;
-    if (strpos($part, '*/') === 0) { // Unterstützt z.B. */5 für "alle 5 Minuten"
+    if (strpos($part, '*/') === 0) { 
         $step = (int)substr($part, 2);
         return $step > 0 && ((int)$current % $step) === 0;
     }
     return false;
 }
 
-// Mini-Proxmox-Fetcher für das Cron-Skript
+// Mini-Proxmox-Fetcher für das Cron-Skript (Mit Token-Auth für PVE!)
 function cronProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $method = "POST", $postData = null) {
     $headers = ["Authorization: PVEAPIToken={$tokenId}={$tokenSecret}"];
     $ch = curl_init("https://{$ip}:8006{$endpoint}");
@@ -39,12 +38,11 @@ function cronProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $method = "POST
     if ($postData) $options[CURLOPT_POSTFIELDS] = http_build_query($postData);
     curl_setopt_array($ch, $options);
     $res = curl_exec($ch); curl_close($ch); 
-    return json_decode($res, true);
+    return json_decode($res, true) ?: [];
 }
 
 echo "[" . date('Y-m-d H:i:s') . "] Starte Scheduler-Check...\n";
 
-// Hole alle aktiven Tasks
 $stmt = $pdo->query("SELECT * FROM scheduled_tasks WHERE is_active = 1");
 $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -59,7 +57,6 @@ foreach ($tasks as $task) {
         if ($node) {
             $success = false;
             
-            // AKTION: PVE NODE NEUSTART
             if ($task['action_type'] === 'reboot_node') {
                 $nData = cronProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes", 'GET');
                 if (isset($nData['data'][0]['node'])) {
@@ -68,9 +65,7 @@ foreach ($tasks as $task) {
                     $success = true;
                 }
             } 
-            // AKTION: VM START / STOP / REBOOT
             elseif (in_array($task['action_type'], ['start_vm', 'stop_vm', 'reboot_vm'])) {
-                // Suche Host und Typ der VM
                 $vmsRes = cronProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/cluster/resources?type=vm", 'GET');
                 if (isset($vmsRes['data'])) {
                     foreach ($vmsRes['data'] as $vm) {
@@ -85,7 +80,6 @@ foreach ($tasks as $task) {
                 }
             }
             
-            // Setze den Zeitstempel für den letzten Durchlauf
             if ($success) {
                 $uStmt = $pdo->prepare("UPDATE scheduled_tasks SET last_run = ? WHERE id = ?");
                 $uStmt->execute([time(), $task['id']]);

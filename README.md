@@ -1,5 +1,7 @@
 # Proxmox Unified Console (PUC) 🚀
 
+![PUC Dashboard Preview](assets/dashboard.png)
+
 A lightning-fast, unified web dashboard to manage your **Proxmox Virtual Environment (PVE)**, **Proxmox Backup Server (PBS)**, and **Proxmox Mail Gateway (PMG)** from a single, clean interface. 
 
 Built entirely with native APIs—no slow iframes, no CORS issues.

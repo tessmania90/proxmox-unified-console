@@ -18,7 +18,6 @@ async function logout() {
 
 if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     
-    // Inject Audit Log Button automatically into Sidebar for Admins
     if (window.APP.username === 'admin' || document.querySelector('a[onclick="openUserManager()"]')) {
         const userBtn = document.querySelector('a[onclick="openUserManager()"]');
         if (userBtn && !document.getElementById('btnAuditLog')) {
@@ -27,7 +26,6 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         }
     }
 
-    // === NEU: PASSWORT ÄNDERN LOGIK ===
     const pwdModal = document.getElementById('passwordModal');
     window.openPasswordModal = function() { if(pwdModal) { pwdModal.classList.remove('hidden'); document.getElementById('changePasswordForm').reset(); } }
     window.closePasswordModal = function() { if(pwdModal) pwdModal.classList.add('hidden'); }
@@ -63,7 +61,84 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     const ctx = document.getElementById('liveChart')?.getContext('2d'); let liveChart;
     if(ctx) { liveChart = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ label: 'CPU (%)', borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 2, tension: 0.4, fill: true, data: [] }, { label: 'RAM (%)', borderColor: '#E57000', backgroundColor: 'rgba(229, 112, 0, 0.1)', borderWidth: 2, tension: 0.4, fill: true, data: [] }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 }, scales: { x: { ticks: { color: '#9ca3af' }, grid: { color: '#33334d' } }, y: { min: 0, max: 100, ticks: { color: '#9ca3af', callback: v => v + '%' }, grid: { color: '#33334d' } } }, plugins: { legend: { labels: { color: '#e2e8f0', usePointStyle: true } } } } }); }
 
-    async function fetchGlobalStats() { if(!document.getElementById('stat-cpu-text')) return; try { const res = await (await fetch('api.php?action=get_stats')).json(); if(res.success && res.data) { const d = res.data; document.getElementById('stat-cpu-text').innerText = `${d.cpu_percent}% (${d.cpu_cores} Cores)`; document.getElementById('stat-cpu-bar').style.width = `${d.cpu_percent}%`; let ramPercent = (d.ram_used / d.ram_total) * 100 || 0; document.getElementById('stat-ram-text').innerText = `${formatBytes(d.ram_used)} / ${formatBytes(d.ram_total)}`; document.getElementById('stat-ram-bar').style.width = `${ramPercent}%`; let diskPercent = (d.disk_used / d.disk_total) * 100 || 0; document.getElementById('stat-disk-text').innerText = `${formatBytes(d.disk_used)} / ${formatBytes(d.disk_total)}`; document.getElementById('stat-disk-bar').style.width = `${diskPercent}%`; if(liveChart) { const now = new Date(); const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0'); liveChart.data.labels.push(timeStr); liveChart.data.datasets[0].data.push(d.cpu_percent); liveChart.data.datasets[1].data.push(ramPercent.toFixed(1)); if (liveChart.data.labels.length > 15) { liveChart.data.labels.shift(); liveChart.data.datasets[0].data.shift(); liveChart.data.datasets[1].data.shift(); } liveChart.update(); } } } catch (err) {} }
+    const ctxNet = document.getElementById('liveNetChart')?.getContext('2d'); let liveNetChart;
+    if(ctxNet) { liveNetChart = new Chart(ctxNet, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 }, scales: { x: { ticks: { color: '#9ca3af' }, grid: { color: '#33334d' } }, y: { min: 0, ticks: { color: '#9ca3af' }, grid: { color: '#33334d' } } }, plugins: { legend: { labels: { color: '#e2e8f0', usePointStyle: true } } } } }); }
+
+    let prevGlobalTime = null;
+
+    async function fetchGlobalStats() { 
+        if(!document.getElementById('stat-cpu-text')) return; 
+        try { 
+            const res = await (await fetch('api.php?action=get_stats')).json(); 
+            if(res.success && res.data) { 
+                const d = res.data; 
+                document.getElementById('stat-cpu-text').innerText = `${d.cpu_percent}% (${d.cpu_cores} Cores)`; 
+                document.getElementById('stat-cpu-bar').style.width = `${d.cpu_percent}%`; 
+                let ramPercent = (d.ram_used / d.ram_total) * 100 || 0; 
+                document.getElementById('stat-ram-text').innerText = `${formatBytes(d.ram_used)} / ${formatBytes(d.ram_total)}`; 
+                document.getElementById('stat-ram-bar').style.width = `${ramPercent}%`; 
+                let diskPercent = (d.disk_used / d.disk_total) * 100 || 0; 
+                document.getElementById('stat-disk-text').innerText = `${formatBytes(d.disk_used)} / ${formatBytes(d.disk_total)}`; 
+                document.getElementById('stat-disk-bar').style.width = `${diskPercent}%`; 
+                
+                // Neue Übersichtskachel füttern
+                if (d.cluster_stats) {
+                    const elNodesOn = document.getElementById('stat-nodes-online');
+                    if (elNodesOn) {
+                        elNodesOn.innerText = d.cluster_stats.nodes_online;
+                        if (d.cluster_stats.nodes_online < d.cluster_stats.nodes_total) {
+                            elNodesOn.className = 'text-red-500';
+                        } else {
+                            elNodesOn.className = 'text-green-500';
+                        }
+                    }
+                    if(document.getElementById('stat-nodes-total')) document.getElementById('stat-nodes-total').innerText = d.cluster_stats.nodes_total;
+                    if(document.getElementById('stat-vms-total')) document.getElementById('stat-vms-total').innerText = d.cluster_stats.vms_total;
+                    if(document.getElementById('stat-vms-run')) document.getElementById('stat-vms-run').innerText = d.cluster_stats.vms_running;
+                    if(document.getElementById('stat-vms-stop')) document.getElementById('stat-vms-stop').innerText = d.cluster_stats.vms_stopped;
+                }
+
+                if(liveChart) { 
+                    const now = new Date(); 
+                    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0'); 
+                    liveChart.data.labels.push(timeStr); 
+                    liveChart.data.datasets[0].data.push(d.cpu_percent); 
+                    liveChart.data.datasets[1].data.push(ramPercent.toFixed(1)); 
+                    if (liveChart.data.labels.length > 15) { 
+                        liveChart.data.labels.shift(); liveChart.data.datasets[0].data.shift(); liveChart.data.datasets[1].data.shift(); 
+                    } 
+                    liveChart.update(); 
+                    
+                    if(liveNetChart && d.nodes_net) { 
+                        const nowTs = Date.now(); 
+                        if (prevGlobalTime !== null) { 
+                            liveNetChart.data.labels.push(timeStr); 
+                            if (liveNetChart.data.labels.length > 15) liveNetChart.data.labels.shift(); 
+                            const colors = ['#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4']; 
+                            
+                            d.nodes_net.forEach((n, idx) => { 
+                                let rxSpeed = n.netin / (1024 * 1024); 
+                                let txSpeed = n.netout / (1024 * 1024); 
+                                let totalSpeed = (rxSpeed + txSpeed).toFixed(2); 
+                                
+                                let ds = liveNetChart.data.datasets.find(ds => ds.label === n.name); 
+                                if (!ds) { 
+                                    const c = colors[idx % colors.length]; 
+                                    ds = { label: n.name, borderColor: c, backgroundColor: c + '1a', borderWidth: 2, tension: 0.4, fill: true, data: new Array(Math.max(0, liveNetChart.data.labels.length - 1)).fill(0) }; 
+                                    liveNetChart.data.datasets.push(ds); 
+                                } 
+                                ds.data.push(totalSpeed); 
+                                if (ds.data.length > 15) ds.data.shift(); 
+                            }); 
+                            liveNetChart.update(); 
+                        } 
+                        prevGlobalTime = nowTs; 
+                    } 
+                } 
+            } 
+        } catch (err) {} 
+    }
+
     async function fetchTopVms() { if(!document.getElementById('top-vms-container')) return; try { const res = await (await fetch('api.php?action=get_top_vms')).json(); if(res.success && res.data) { const container = document.getElementById('top-vms-container'); container.innerHTML = ''; if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktiven VMs.</p>'; return; } res.data.forEach((vm, i) => { const cpuPercent = ((vm.cpu || 0) * 100).toFixed(1); const ramUsed = formatBytes(vm.mem || 0); const icon = vm.type === 'lxc' ? '📦' : '🖥️'; const numberColor = i === 0 ? 'text-red-500' : (i === 1 ? 'text-orange-400' : (i === 2 ? 'text-yellow-400' : 'text-gray-400')); container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-transform hover:scale-[1.02] cursor-default"><div class="flex items-center gap-3"><span class="font-bold text-xl ${numberColor}">#${i + 1}</span><div><h4 class="text-white font-semibold text-sm truncate w-32">${icon} ${vm.name}</h4><p class="text-xs text-gray-500">Host: ${vm.host}</p></div></div><div class="text-right"><p class="text-proxmox font-bold text-sm">${cpuPercent}% CPU</p><p class="text-xs text-gray-400">${ramUsed} RAM</p></div></div>`; }); } } catch (err) {} }
     async function fetchRecentJobs() { if(!document.getElementById('recent-jobs-container')) return; try { const res = await (await fetch('api.php?action=get_recent_jobs')).json(); if(res.success && res.data) { const container = document.getElementById('recent-jobs-container'); container.innerHTML = ''; if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktuellen Jobs.</p>'; return; } res.data.forEach(job => { const jobTypeStr = job.type || job.worker_type || 'unknown'; let statusColor = 'text-gray-400', statusIcon = '⏳', statusText = job.status || 'running...'; if(statusText.toLowerCase() === 'ok') { statusColor = 'text-green-500'; statusIcon = '✅'; } else if(statusText !== 'running...') { statusColor = 'text-red-500'; statusIcon = '❌'; } else { statusColor = 'text-blue-400'; statusIcon = '🔄'; } const date = new Date(job.starttime * 1000); const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }), dateStr = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); const isBackup = jobTypeStr.includes('sync') || jobTypeStr.includes('prune') || jobTypeStr.includes('garbage_collection') || jobTypeStr.includes('vzdump') || jobTypeStr.includes('verify'); const jobTypeColor = isBackup ? 'text-purple-400' : 'text-white'; container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-colors hover:bg-darkborder/50"><div class="flex items-center gap-3"><div class="text-lg">${statusIcon}</div><div class="max-w-[120px]"><p class="${jobTypeColor} font-medium text-sm capitalize truncate" title="${jobTypeStr}">${jobTypeStr}</p><p class="text-xs text-gray-500 truncate" title="${job.node_name}">Host: <span class="text-proxmox">${job.node_name}</span></p></div></div><div class="text-right"><p class="${statusColor} font-bold text-sm uppercase">${statusText}</p><p class="text-xs text-gray-500">${dateStr} - ${timeStr}</p></div></div>`; }); } } catch (err) { console.error(err); } }
     async function fetchUpdates() { if(!document.getElementById('stat-updates-text')) return; try { const res = await (await fetch('api.php?action=get_updates')).json(); if(res.success) { const el = document.getElementById('stat-updates-text'), subEl = document.getElementById('stat-updates-sub'); if(res.total === 0) { el.innerText = '0 Updates'; el.className = 'text-2xl font-bold text-green-500 mt-1'; subEl.innerText = 'Alle Systeme sind aktuell.'; } else { el.innerText = res.total + ' Updates'; el.className = 'text-2xl font-bold text-red-500 mt-1'; subEl.innerText = 'Auf: ' + res.details; } } } catch (err) {} }
@@ -227,12 +302,28 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                     const d = res.data; const now = Date.now();
                     let cpuRaw = 0; if (d.cpu !== undefined) cpuRaw = d.cpu; else if (d.cpuinfo && d.cpuinfo.cpus) cpuRaw = 0; const cpu = (cpuRaw * 100).toFixed(1);
                     let ram = 0; if (d.maxmem && d.maxmem > 0) { ram = ((d.mem / d.maxmem) * 100).toFixed(1); } else if (d.memory && d.memory.total > 0) { ram = ((d.memory.used / d.memory.total) * 100).toFixed(1); }
-                    let currentNetIn = d.netin || 0; let currentNetOut = d.netout || 0; let rxSpeed = 0; let txSpeed = 0;
-                    if(prevTime !== null) { const timeSec = (now - prevTime) / 1000; if (timeSec > 0) { rxSpeed = Math.max(0, ((currentNetIn - prevNetIn) / timeSec / (1024 * 1024))).toFixed(2); txSpeed = Math.max(0, ((currentNetOut - prevNetOut) / timeSec / (1024 * 1024))).toFixed(2); } }
+                    
+                    let currentNetIn = d.netin || 0; let currentNetOut = d.netout || 0; 
+                    let rxSpeed = 0; let txSpeed = 0;
+                    
+                    if (d.is_rrd_net) {
+                        rxSpeed = (currentNetIn / (1024 * 1024)).toFixed(2);
+                        txSpeed = (currentNetOut / (1024 * 1024)).toFixed(2);
+                    } else {
+                        if(prevTime !== null) { 
+                            const timeSec = (now - prevTime) / 1000; 
+                            if (timeSec > 0) { 
+                                rxSpeed = Math.max(0, ((currentNetIn - prevNetIn) / timeSec / (1024 * 1024))).toFixed(2); 
+                                txSpeed = Math.max(0, ((currentNetOut - prevNetOut) / timeSec / (1024 * 1024))).toFixed(2); 
+                            } 
+                        }
+                    }
+                    
                     prevNetIn = currentNetIn; prevNetOut = currentNetOut; prevTime = now;
                     const timeStr = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    
                     perfChartObj.data.labels.push(timeStr); perfChartObj.data.datasets[0].data.push(cpu); perfChartObj.data.datasets[1].data.push(ram); if(perfChartObj.data.labels.length > 30) { perfChartObj.data.labels.shift(); perfChartObj.data.datasets[0].data.shift(); perfChartObj.data.datasets[1].data.shift(); } perfChartObj.update();
-                    if(prevTime !== null) { netChartObj.data.labels.push(timeStr); netChartObj.data.datasets[0].data.push(rxSpeed); netChartObj.data.datasets[1].data.push(txSpeed); if(netChartObj.data.labels.length > 30) { netChartObj.data.labels.shift(); netChartObj.data.datasets[0].data.shift(); netChartObj.data.datasets[1].data.shift(); } netChartObj.update(); }
+                    if(prevTime !== null || d.is_rrd_net) { netChartObj.data.labels.push(timeStr); netChartObj.data.datasets[0].data.push(rxSpeed); netChartObj.data.datasets[1].data.push(txSpeed); if(netChartObj.data.labels.length > 30) { netChartObj.data.labels.shift(); netChartObj.data.datasets[0].data.shift(); netChartObj.data.datasets[1].data.shift(); } netChartObj.update(); }
                 }
             } catch(e) {}
         };
@@ -519,7 +610,6 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         try { const res = await (await fetch('api.php?action=pmg_upload_ssl', {method: 'POST', body: fd})).json(); if(res.success) { alert('Zertifikat hochgeladen! Dienste werden neu gestartet.'); document.getElementById('pmgSslCert').value = ''; document.getElementById('pmgSslKey').value = ''; loadPmgSsl(document.getElementById('pmgNodeId').value); } else { alert('Fehler beim Upload. (Format prüfen)'); } } catch(e) { alert('Netzwerkfehler.'); } finally { btn.innerText = oTxt; }
     }
 
-    // === SCHEDULER ===
     const cronModal = document.getElementById('cronManagerModal');
     window.openCronManager = async function() {
         cronModal.classList.remove('hidden');
@@ -568,7 +658,6 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     window.toggleCronJob = async function(id, newState) { const fd = new FormData(); fd.append('id', id); fd.append('is_active', newState); await fetch('api.php?action=toggle_cron_job', {method: 'POST', body: fd}); loadCronJobs(); }
     window.deleteCronJob = async function(id) { if(!confirm('Diesen geplanten Job wirklich löschen?')) return; const fd = new FormData(); fd.append('id', id); await fetch('api.php?action=delete_cron_job', {method: 'POST', body: fd}); loadCronJobs(); }
 
-    // === AUDIT LOG ===
     const auditModal = document.getElementById('auditLogModal');
     window.openAuditLog = async function() {
         auditModal.classList.remove('hidden');

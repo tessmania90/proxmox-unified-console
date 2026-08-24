@@ -38,11 +38,9 @@ $nodeCount = $stmt->fetchColumn();
             <?php if ($isLoggedIn): ?>
                 <div class="flex items-center gap-4 text-sm">
                     <span class="text-gray-400">Hallo, <span class="text-white font-bold"><?= htmlspecialchars($_SESSION['username']) ?></span></span>
-                    
                     <button onclick="openPasswordModal()" class="text-gray-400 hover:text-white transition-colors" title="Passwort ändern">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4v-3.286l5.742-5.742C9.4 11.135 9 10.126 9 9a6 6 0 0112 0z"></path></svg>
                     </button>
-
                     <button onclick="logout()" class="text-red-400 hover:text-red-300 font-medium transition-colors">Abmelden</button>
                 </div>
             <?php else: ?>
@@ -84,13 +82,58 @@ $nodeCount = $stmt->fetchColumn();
                         
                         <!-- TAB 1: PVE -->
                         <div id="tab-pve" class="flex-1 flex flex-col min-w-0 transition-opacity duration-300">
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            
+                            <!-- NEUE TOP KACHEL: Gesamtübersicht -->
+                            <div class="mb-6 bg-darkcard border border-darkborder rounded-xl p-6 shadow-lg flex flex-col md:flex-row justify-between items-center gap-6">
+                                <div class="flex items-center gap-4">
+                                    <div class="p-3 bg-blue-500/10 rounded-xl">
+                                        <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                                    </div>
+                                    <div>
+                                        <h2 class="text-xl font-bold text-white">Gesamtübersicht</h2>
+                                        <p class="text-gray-400 text-sm">Cluster & Standalone Nodes</p>
+                                    </div>
+                                </div>
+                                <div class="flex flex-wrap justify-center gap-6 md:gap-12">
+                                    <div class="text-center">
+                                        <p class="text-gray-400 text-xs font-bold uppercase mb-1">Server (Nodes)</p>
+                                        <p class="text-2xl font-bold text-white"><span id="stat-nodes-online" class="text-green-500">0</span><span class="text-gray-600 mx-1">/</span><span id="stat-nodes-total" class="text-gray-300">0</span></p>
+                                    </div>
+                                    <div class="hidden md:block w-px bg-darkborder"></div>
+                                    <div class="text-center">
+                                        <p class="text-gray-400 text-xs font-bold uppercase mb-1">Total VMs/LXC</p>
+                                        <p class="text-2xl font-bold text-white" id="stat-vms-total">0</p>
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="text-gray-400 text-xs font-bold uppercase mb-1">Online</p>
+                                        <p class="text-2xl font-bold text-green-500" id="stat-vms-run">0</p>
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="text-gray-400 text-xs font-bold uppercase mb-1">Offline</p>
+                                        <p class="text-2xl font-bold text-red-500" id="stat-vms-stop">0</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Hardware 4 Columns -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
                                 <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><div class="flex justify-between items-start mb-4"><div><p class="text-gray-400 text-sm font-medium">Cluster CPU Cores</p><h3 id="stat-cpu-text" class="text-2xl font-bold text-white mt-1">Lade...</h3></div><div class="p-2 bg-blue-500/10 rounded-lg"><svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg></div></div><div class="w-full bg-darkbg rounded-full h-2"><div id="stat-cpu-bar" class="bg-blue-500 h-2 rounded-full" style="width: 0%"></div></div></div>
                                 <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><div class="flex justify-between items-start mb-4"><div><p class="text-gray-400 text-sm font-medium">Globaler RAM</p><h3 id="stat-ram-text" class="text-2xl font-bold text-white mt-1">Lade...</h3></div><div class="p-2 bg-proxmox/10 rounded-lg"><svg class="w-6 h-6 text-proxmox" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div></div><div class="w-full bg-darkbg rounded-full h-2"><div id="stat-ram-bar" class="bg-proxmox h-2 rounded-full" style="width: 0%"></div></div></div>
                                 <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><div class="flex justify-between items-start mb-4"><div><p class="text-gray-400 text-sm font-medium">Datacenter Storage</p><h3 id="stat-disk-text" class="text-2xl font-bold text-white mt-1">Lade...</h3></div><div class="p-2 bg-emerald-500/10 rounded-lg"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg></div></div><div class="w-full bg-darkbg rounded-full h-2"><div id="stat-disk-bar" class="bg-emerald-500 h-2 rounded-full" style="width: 0%"></div></div></div>
                                 <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg flex flex-col justify-center"><div class="flex justify-between items-start mb-1"><div><p class="text-gray-400 text-sm font-medium">System Updates (APT)</p><h3 id="stat-updates-text" class="text-2xl font-bold text-white mt-1">Lade...</h3></div><div class="p-2 bg-purple-500/10 rounded-lg"><svg class="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg></div></div><div id="stat-updates-sub" class="text-xs text-gray-500 mt-1 truncate">Prüfe Updates...</div></div>
                             </div>
-                            <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg min-h-[300px] flex flex-col justify-center mb-6"><div class="flex justify-between items-center mb-4"><h3 class="text-white font-bold">Live Cluster Auslastung</h3><span class="text-xs text-gray-500 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Live Sync</span></div><div class="relative h-full w-full min-h-[220px]"><canvas id="liveChart"></canvas></div></div>
+                            
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                                <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg min-h-[300px] flex flex-col justify-center">
+                                    <div class="flex justify-between items-center mb-4"><h3 class="text-white font-bold">Live Cluster Auslastung</h3><span class="text-xs text-gray-500 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> CPU / RAM</span></div>
+                                    <div class="relative h-full w-full min-h-[220px]"><canvas id="liveChart"></canvas></div>
+                                </div>
+                                <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg min-h-[300px] flex flex-col justify-center">
+                                    <div class="flex justify-between items-center mb-4"><h3 class="text-white font-bold">Live Netzwerk Traffic</h3><span class="text-xs text-gray-500 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> MB/s Total pro Node</span></div>
+                                    <div class="relative h-full w-full min-h-[220px]"><canvas id="liveNetChart"></canvas></div>
+                                </div>
+                            </div>
+                            
                             <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><h3 class="text-white font-bold mb-4">🔥 Top 5 Ressourcen-Fresser</h3><div id="top-vms-container" class="space-y-3"><p class="text-gray-400 text-sm">Lädt Live-Daten von Proxmox API...</p></div></div>
                         </div>
 
@@ -130,8 +173,6 @@ $nodeCount = $stmt->fetchColumn();
     </footer>
 
     <script> window.APP = { isLoggedIn: <?= $isLoggedIn ? 'true' : 'false' ?>, nodeCount: <?= $nodeCount ?>, username: '<?= htmlspecialchars($_SESSION['username'] ?? '') ?>' }; </script>
-    
-    <!-- HIER IST DER CACHE-BUSTER, DAMIT DER LOGOUT IMMER GEHT! -->
     <script src="app.js?v=<?= time() ?>"></script>
 </body>
 </html>

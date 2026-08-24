@@ -85,40 +85,37 @@ if ($action === 'change_password') {
 $isAdmin = ($_SESSION['role'] ?? '') === 'admin';
 @session_write_close(); 
 
+// === PROXMOX API FETCHER ===
 function getProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $type = 'pve', $method = "GET", $postData = null, $timeout = 6) {
     $port = ($type === 'pbs') ? 8007 : 8006;
     
-    $chAuth = curl_init("https://{$ip}:{$port}/api2/json/access/ticket");
-    curl_setopt_array($chAuth, [
-        CURLOPT_RETURNTRANSFER => true, 
-        CURLOPT_SSL_VERIFYPEER => false, 
-        CURLOPT_SSL_VERIFYHOST => false, 
-        CURLOPT_TIMEOUT => 4, 
-        CURLOPT_POST => true, 
-        CURLOPT_POSTFIELDS => http_build_query(['username' => $tokenId, 'password' => $tokenSecret])
-    ]);
-    $authRes = json_decode(curl_exec($chAuth), true); 
-    curl_close($chAuth);
-    
-    if(!isset($authRes['data']['ticket'])) {
-        return ['data' => null, 'error' => 'Authentifizierung fehlgeschlagen'];
-    }
+    if ($type === 'pmg' || $type === 'pbs') {
+        // TICKET AUTH für PBS und PMG
+        $chAuth = curl_init("https://{$ip}:{$port}/api2/json/access/ticket");
+        curl_setopt_array($chAuth, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_SSL_VERIFYPEER => false, 
+            CURLOPT_SSL_VERIFYHOST => false, CURLOPT_TIMEOUT => 4, 
+            CURLOPT_POST => true, 
+            CURLOPT_POSTFIELDS => http_build_query(['username' => $tokenId, 'password' => $tokenSecret])
+        ]);
+        $authRes = json_decode(curl_exec($chAuth), true); curl_close($chAuth);
+        
+        if(!isset($authRes['data']['ticket'])) return ['data' => null, 'error' => 'Auth failed'];
 
-    $cookieName = 'PVEAuthCookie';
-    if ($type === 'pbs') $cookieName = 'PBSAuthCookie';
-    if ($type === 'pmg') $cookieName = 'PMGAuthCookie';
-    
-    $headers = [
-        "Cookie: {$cookieName}=" . $authRes['data']['ticket'], 
-        "CSRFPreventionToken: " . $authRes['data']['CSRFPreventionToken']
-    ];
+        $cookieName = ($type === 'pbs') ? 'PBSAuthCookie' : 'PMGAuthCookie';
+        $headers = [
+            "Cookie: {$cookieName}=" . $authRes['data']['ticket'], 
+            "CSRFPreventionToken: " . $authRes['data']['CSRFPreventionToken']
+        ];
+    } else {
+        // NATIVE API TOKENS FÜR PVE
+        $headers = ["Authorization: PVEAPIToken={$tokenId}={$tokenSecret}"];
+    }
 
     $ch = curl_init("https://{$ip}:{$port}{$endpoint}");
     $options = [
-        CURLOPT_RETURNTRANSFER => true, 
-        CURLOPT_SSL_VERIFYPEER => false, 
-        CURLOPT_SSL_VERIFYHOST => false, 
-        CURLOPT_TIMEOUT => $timeout, 
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_SSL_VERIFYPEER => false, 
+        CURLOPT_SSL_VERIFYHOST => false, CURLOPT_TIMEOUT => $timeout, 
         CURLOPT_HTTPHEADER => $headers
     ];
     
@@ -130,8 +127,7 @@ function getProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $type = 'pve', $
     }
     
     curl_setopt_array($ch, $options);
-    $res = curl_exec($ch); 
-    curl_close($ch); 
+    $res = curl_exec($ch); curl_close($ch); 
     
     return json_decode($res, true) ?: [];
 }
