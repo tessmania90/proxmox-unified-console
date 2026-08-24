@@ -1,6 +1,6 @@
 <?php
 // /home/docker/pve_dashboard/src/api_pve.php
-if (!defined('PDO::ATTR_DRIVER_NAME')) exit; // Schutz
+if (!defined('PDO::ATTR_DRIVER_NAME')) exit; // Schutz vor direktem Aufruf
 
 if ($action === 'get_stats') {
     $stmt = $pdo->query("SELECT * FROM nodes WHERE type = 'pve'"); $nodes = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -30,7 +30,6 @@ if ($action === 'get_top_vms') {
                 if (checkVmPermission($pdo, $vm['vmid'])) { 
                     $vm['node_id'] = $node['id']; 
                     $vm['node_ip'] = $node['ip_address']; 
-                    // MAGISCHER FIX: PVE nennt den Host "node"
                     $vm['host'] = $vm['node'] ?? 'unknown'; 
                     $allVms[] = $vm; 
                 } 
@@ -50,7 +49,6 @@ if ($action === 'get_all_vms') {
                 if (checkVmPermission($pdo, $vm['vmid'])) { 
                     $vm['node_id'] = $node['id']; 
                     $vm['node_ip'] = $node['ip_address']; 
-                    // MAGISCHER FIX
                     $vm['host'] = $vm['node'] ?? 'unknown'; 
                     $allVms[] = $vm; 
                 } 
@@ -64,9 +62,9 @@ if ($action === 'get_all_vms') {
 if ($action === 'vm_action') {
     if (!checkVmPermission($pdo, $_POST['vmid'])) exit;
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_POST['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
-    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/status/{$_POST['cmd']}", "POST");
+    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/status/{$_POST['cmd']}", 'pve', 'POST');
     logAudit("VM {$_POST['cmd']}", "VMID: {$_POST['vmid']} auf Host: {$_POST['host']}");
-    echo json_encode(['success' => isset($res['data']), 'error' => $res['errors'] ?? 'Fehler']); exit;
+    echo json_encode(['success' => isset($res['data']), 'error' => $res['errors'] ?? 'Aktion fehlgeschlagen.']); exit;
 }
 
 if ($action === 'get_nodes') { if (!$isAdmin) exit; $stmt = $pdo->query("SELECT id, name, ip_address, type FROM nodes"); echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]); exit; }
@@ -105,9 +103,9 @@ if ($action === 'create_vm') {
     if(!isset($nextIdRes['data'])) { echo json_encode(['success' => false, 'error' => 'Konnte keine freie VMID finden.']); exit; }
     $vmid = $nextIdRes['data'];
     $params = ['vmid' => $vmid, 'name' => $_POST['name'], 'memory' => $_POST['memory'], 'cores' => $_POST['cores'], 'net0' => 'virtio,bridge=vmbr0'];
-    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/qemu", "POST", $params);
+    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/qemu", 'pve', 'POST', $params);
     logAudit('VM Erstellt', "VMID: {$vmid} Name: {$_POST['name']}");
-    echo json_encode(['success' => isset($res['data']), 'vmid' => $vmid]); exit;
+    echo json_encode(['success' => isset($res['data']), 'vmid' => $vmid, 'error' => isset($res['data']) ? '' : 'Fehler bei der VM Erstellung in Proxmox.']); exit;
 }
 
 if ($action === 'get_vm_config') {
@@ -124,9 +122,9 @@ if ($action === 'update_vm_config') {
     if(isset($_POST['memory'])) $params['memory'] = $_POST['memory'];
     if(isset($_POST['cores'])) $params['cores'] = $_POST['cores'];
     if(isset($_POST['net0'])) $params['net0'] = $_POST['net0'];
-    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/config", "POST", $params);
+    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/config", 'pve', 'POST', $params);
     logAudit('VM Config geändert', "VMID: {$_POST['vmid']}");
-    echo json_encode(['success' => isset($res['data'])]); exit;
+    echo json_encode(['success' => isset($res['data']), 'error' => 'API Fehler']); exit;
 }
 
 if ($action === 'add_vm_nic') {
@@ -134,25 +132,25 @@ if ($action === 'add_vm_nic') {
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_POST['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
     $cfg = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/config");
     $nextNic = 0; for ($i=0; $i<10; $i++) { if (!isset($cfg['data']["net{$i}"])) { $nextNic = $i; break; } }
-    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/config", "POST", ["net{$nextNic}" => "virtio,bridge={$_POST['bridge']}"]);
+    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/config", 'pve', 'POST', ["net{$nextNic}" => "virtio,bridge={$_POST['bridge']}"]);
     logAudit('VM NIC hinzugefügt', "VMID: {$_POST['vmid']} Bridge: {$_POST['bridge']}");
-    echo json_encode(['success' => isset($res['data']), 'slot' => "net{$nextNic}"]); exit;
+    echo json_encode(['success' => isset($res['data']), 'slot' => "net{$nextNic}", 'error' => 'API Fehler']); exit;
 }
 
 if ($action === 'resize_vm_disk') {
     if (!checkVmPermission($pdo, $_POST['vmid'])) exit;
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_POST['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
-    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/resize", "PUT", ['disk' => $_POST['disk'], 'size' => $_POST['size']]);
+    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/resize", 'pve', 'PUT', ['disk' => $_POST['disk'], 'size' => $_POST['size']]);
     logAudit('VM Disk erweitert', "VMID: {$_POST['vmid']} Disk: {$_POST['disk']} Size: {$_POST['size']}");
-    echo json_encode(['success' => isset($res['data'])]); exit;
+    echo json_encode(['success' => isset($res['data']), 'error' => 'API Fehler']); exit;
 }
 
 if ($action === 'delete_vm') {
     if (!$isAdmin) exit;
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_POST['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
-    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}", "DELETE");
+    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}", 'pve', 'DELETE');
     logAudit('VM Gelöscht', "VMID: {$_POST['vmid']}");
-    echo json_encode(['success' => isset($res['data'])]); exit;
+    echo json_encode(['success' => isset($res['data']), 'error' => 'API Fehler']); exit;
 }
 
 if ($action === 'get_vm_snapshots') {
@@ -166,11 +164,11 @@ if ($action === 'vm_snapshot_action') {
     if (!checkVmPermission($pdo, $_POST['vmid'])) exit;
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_POST['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
     $cmd = $_POST['cmd']; $snapname = $_POST['snapname'];
-    if ($cmd === 'create') { $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/snapshot", "POST", ['snapname' => $snapname]); } 
-    elseif ($cmd === 'delete') { $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/snapshot/{$snapname}", "DELETE"); } 
-    elseif ($cmd === 'rollback') { $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/snapshot/{$snapname}/rollback", "POST"); }
+    if ($cmd === 'create') { $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/snapshot", 'pve', 'POST', ['snapname' => $snapname]); } 
+    elseif ($cmd === 'delete') { $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/snapshot/{$snapname}", 'pve', 'DELETE'); } 
+    elseif ($cmd === 'rollback') { $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/snapshot/{$snapname}/rollback", 'pve', 'POST'); }
     logAudit('Snapshot ' . $cmd, "VMID: {$_POST['vmid']} Snap: {$snapname}");
-    echo json_encode(['success' => isset($res['data'])]); exit;
+    echo json_encode(['success' => isset($res['data']), 'error' => 'API Fehler']); exit;
 }
 
 if ($action === 'get_backup_storages') {
@@ -201,9 +199,9 @@ if ($action === 'get_vm_backups') {
 if ($action === 'create_backup') {
     if (!checkVmPermission($pdo, $_POST['vmid'])) exit;
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_POST['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
-    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/vzdump", "POST", ['vmid' => $_POST['vmid'], 'storage' => $_POST['storage'], 'mode' => 'snapshot']);
+    $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/vzdump", 'pve', 'POST', ['vmid' => $_POST['vmid'], 'storage' => $_POST['storage'], 'mode' => 'snapshot']);
     logAudit('Manuelles Backup', "VMID: {$_POST['vmid']} Storage: {$_POST['storage']}");
-    echo json_encode(['success' => isset($res['data'])]); exit;
+    echo json_encode(['success' => isset($res['data']), 'error' => 'API Fehler']); exit;
 }
 
 if ($action === 'restore_backup') {
@@ -211,14 +209,22 @@ if ($action === 'restore_backup') {
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_POST['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
     $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}/{$_POST['vmid']}/status/current");
     if (isset($res['data']) && $res['data']['status'] === 'running') { echo json_encode(['success' => false, 'error' => 'VM muss gestoppt sein!']); exit; }
-    $resRestore = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}", "POST", ['vmid' => $_POST['vmid'], 'archive' => $_POST['archive'], 'force' => 1]);
+    $resRestore = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$_POST['host']}/{$_POST['type']}", 'pve', 'POST', ['vmid' => $_POST['vmid'], 'archive' => $_POST['archive'], 'force' => 1]);
     logAudit('Backup Restore', "VMID: {$_POST['vmid']} Archive: {$_POST['archive']}");
-    echo json_encode(['success' => isset($resRestore['data'])]); exit;
+    echo json_encode(['success' => isset($resRestore['data']), 'error' => 'API Fehler']); exit;
 }
 
 if ($action === 'get_node_status' || $action === 'get_vm_status') {
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_GET['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
-    $endpoint = $action === 'get_node_status' ? "/api2/json/nodes/{$_GET['host']}/status" : "/api2/json/nodes/{$_GET['host']}/{$_GET['type']}/{$_GET['vmid']}/status/current";
+    
+    if ($action === 'get_node_status') {
+        $nData = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes");
+        $internalName = $nData['data'][0]['node'] ?? 'pve';
+        $endpoint = "/api2/json/nodes/{$internalName}/status";
+    } else {
+        $endpoint = "/api2/json/nodes/{$_GET['host']}/{$_GET['type']}/{$_GET['vmid']}/status/current";
+    }
+    
     $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], $endpoint);
     echo json_encode(['success' => true, 'data' => $res['data'] ?? []]); exit;
 }
