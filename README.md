@@ -60,19 +60,20 @@ services:
       - ./data:/var/www/data
     environment:
       - TZ=Europe/Berlin
-
+```
 2. Starten:
+```
 Bash
 
 docker compose up -d
-
+```
 3. ⚠️ WICHTIG: Rechte für SQLite anpassen:
 Da der Container als Benutzer www-data (UID 33) läuft, der neu erstellte Volume-Ordner auf dem Host aber oft root gehört, muss dem Ordner die Schreibberechtigung erteilt werden. Führe im Verzeichnis der Compose-Datei aus:
 Bash
-
+```
 sudo chown -R 33:33 ./data
 sudo chmod -R 775 ./data
-
+```
 4. Login:
 Rufe https://<DEINE-IP>:8443 in deinem Browser auf (Zertifikatswarnung ignorieren).
 
