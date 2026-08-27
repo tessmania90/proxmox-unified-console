@@ -301,14 +301,29 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     window.checkCronAction = function() { const action = document.getElementById('cronAction').value; const vmBlock = document.getElementById('cronVmBlock'); if (action.includes('_vm')) vmBlock.classList.remove('hidden'); else vmBlock.classList.add('hidden'); }
     async function loadCronJobs() { const tbody = document.getElementById('cronTableBody'); tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-4 animate-pulse">Lade Jobs...</td></tr>'; try { const res = await (await fetch('api.php?action=get_cron_jobs')).json(); if (res.success) { tbody.innerHTML = ''; if(res.data.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-4">Keine geplanten Jobs.</td></tr>'; return; } res.data.forEach(job => { const lastRun = formatDate(job.last_run); const isActive = parseInt(job.is_active) === 1; const statusDot = isActive ? '<span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_5px_#22c55e]"></span> Aktiv' : '<span class="w-2 h-2 rounded-full bg-gray-600"></span> Pausiert'; const targetStr = job.action_type.includes('_vm') ? `VM ${job.target_vmid}` : 'Gesamter Host'; let actionStr = job.action_type; if(actionStr === 'reboot_node') actionStr = 'Host Reboot'; if(actionStr === 'start_vm') actionStr = 'VM Start'; if(actionStr === 'stop_vm') actionStr = 'VM Stop'; if(actionStr === 'reboot_vm') actionStr = 'VM Reboot'; tbody.innerHTML += `<tr class="hover:bg-darkcard/50 transition-colors border-b border-darkborder/50"><td class="px-4 py-3 whitespace-nowrap cursor-pointer" onclick="toggleCronJob(${job.id}, ${isActive ? 0 : 1})"><div class="flex items-center gap-2 text-xs font-bold text-gray-300 hover:text-white">${statusDot}</div></td><td class="px-4 py-3"><p class="text-white font-bold">${job.name}</p><p class="text-xs text-proxmox font-bold">${actionStr}</p></td><td class="px-4 py-3"><p class="text-gray-300">${job.node_name}</p><p class="text-xs text-gray-500">Ziel: ${targetStr}</p></td><td class="px-4 py-3 font-mono text-blue-400 font-bold tracking-widest">${job.cron_schedule}</td><td class="px-4 py-3 text-gray-400 whitespace-nowrap">${lastRun}</td><td class="px-4 py-3 text-right"><button onclick="deleteCronJob(${job.id})" class="text-red-500 hover:text-white px-2 py-1 bg-red-500/10 hover:bg-red-500 rounded text-xs font-bold transition-colors">Löschen</button></td></tr>`; }); } } catch(e) {} }
     
+    window.toggleCronDate = function() { const d = document.getElementById('cronDays').value; const i = document.getElementById('cronSpecificDate'); if (d === 'specific') { i.classList.remove('hidden'); i.required = true; } else { i.classList.add('hidden'); i.required = false; } }
+
     const addCronForm = document.getElementById('addCronJobForm');
     if(addCronForm) {
         addCronForm.addEventListener('submit', async function(e) {
             e.preventDefault(); const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Speichere...';
-            const timeVal = document.getElementById('cronTime').value; const daysVal = document.getElementById('cronDays').value; 
-            const [hour, minute] = timeVal.split(':'); const generatedCronStr = `${parseInt(minute, 10)} ${parseInt(hour, 10)} * * ${daysVal}`;
+            
+            const timeVal = document.getElementById('cronTime').value; 
+            const daysVal = document.getElementById('cronDays').value; 
+            const [hour, minute] = timeVal.split(':'); 
+            
+            let generatedCronStr = '';
+            if (daysVal === 'specific') {
+                const dateVal = document.getElementById('cronSpecificDate').value;
+                if (!dateVal) { btn.innerText = oTxt; return alert('Bitte Datum wählen!'); }
+                const dParts = dateVal.split('-'); // YYYY-MM-DD
+                generatedCronStr = `${parseInt(minute, 10)} ${parseInt(hour, 10)} ${parseInt(dParts[2], 10)} ${parseInt(dParts[1], 10)} *`;
+            } else {
+                generatedCronStr = `${parseInt(minute, 10)} ${parseInt(hour, 10)} * * ${daysVal}`;
+            }
+
             const fd = new FormData(); fd.append('name', document.getElementById('cronName').value); fd.append('node_id', document.getElementById('cronNodeId').value); fd.append('action_type', document.getElementById('cronAction').value); fd.append('target_vmid', document.getElementById('cronTargetVmid').value); fd.append('cron_schedule', generatedCronStr);
-            try { const res = await (await fetch('api.php?action=add_cron_job', {method: 'POST', body: fd})).json(); if(res.success) { addCronForm.reset(); document.getElementById('cronTime').value = '03:00'; checkCronAction(); loadCronJobs(); } else alert('Fehler.'); } catch(e) {} finally { btn.innerText = oTxt; }
+            try { const res = await (await fetch('api.php?action=add_cron_job', {method: 'POST', body: fd})).json(); if(res.success) { addCronForm.reset(); document.getElementById('cronTime').value = '03:00'; toggleCronDate(); checkCronAction(); loadCronJobs(); } else alert('Fehler.'); } catch(e) {} finally { btn.innerText = oTxt; }
         });
     }
 

@@ -88,13 +88,15 @@
                             <input type="time" id="cronTime" value="03:00" class="w-full bg-darkbg border border-darkborder rounded p-2 text-white text-sm" required>
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-gray-500 mb-1">Tage</label>
-                            <select id="cronDays" class="w-full bg-darkbg border border-darkborder rounded p-2 text-white text-sm" required>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Tage / Datum</label>
+                            <select id="cronDays" onchange="toggleCronDate()" class="w-full bg-darkbg border border-darkborder rounded p-2 text-white text-sm" required>
                                 <option value="*">Jeden Tag</option>
                                 <option value="1-5">Montag - Freitag</option>
                                 <option value="6,0">Wochenende</option>
                                 <option value="1">Jeden Montag</option>
+                                <option value="specific">📅 Einmalig (Bestimmtes Datum)</option>
                             </select>
+                            <input type="date" id="cronSpecificDate" class="w-full bg-darkbg border border-darkborder rounded p-2 text-white text-sm mt-2 hidden">
                         </div>
                     </div>
                     <button type="submit" class="bg-proxmox hover:bg-orange-600 text-white font-bold py-2 px-6 rounded transition-colors text-sm w-full md:w-auto">Job Speichern</button>

@@ -356,31 +356,27 @@ if ($action === 'get_node_status' || $action === 'get_vm_status') {
     }
 }
 
-// === NEU: RRD Historie (24h / 7 Tage) für alle Node Typen ===
+// === RRD Historie (24h / 7 Tage) für alle Node Typen ===
 if ($action === 'get_historical_rrd') {
     if (!checkVmPermission($pdo, $_GET['vmid'] ?? 0)) exit;
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_GET['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
     $timeframe = $_GET['timeframe'] === 'week' ? 'week' : 'day';
     $type = $node['type'] ?? 'pve';
     
-    if ($type === 'pbs') {
-        $endpoint = "/api2/json/nodes/localhost/rrddata?timeframe={$timeframe}&cf=AVERAGE";
-    } elseif ($type === 'pmg') {
-        $internalName = $_GET['host'] ?? 'localhost';
+    if ($_GET['target_mode'] === 'node') {
+        // Internen Node-Namen von Proxmox auflösen, da der Datenbank-Name sonst zu einem 404 Fehler führt
+        $nData = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes", $type);
+        $internalName = $nData['data'][0]['node'] ?? 'localhost';
         $endpoint = "/api2/json/nodes/{$internalName}/rrddata?timeframe={$timeframe}&cf=AVERAGE";
     } else {
-        if ($_GET['target_mode'] === 'node') {
-            $endpoint = "/api2/json/nodes/{$_GET['host']}/rrddata?timeframe={$timeframe}&cf=AVERAGE";
-        } else {
-            $endpoint = "/api2/json/nodes/{$_GET['host']}/{$_GET['target_mode']}/{$_GET['vmid']}/rrddata?timeframe={$timeframe}&cf=AVERAGE";
-        }
+        $endpoint = "/api2/json/nodes/{$_GET['host']}/{$_GET['target_mode']}/{$_GET['vmid']}/rrddata?timeframe={$timeframe}&cf=AVERAGE";
     }
     
     $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], $endpoint, $type);
     echo json_encode(['success' => true, 'data' => $res['data'] ?? []]); exit;
 }
 
-// === NEU: APT Update Manager ===
+// === APT Update Manager ===
 if ($action === 'get_update_details') {
     if (!$isAdmin) exit;
     $stmt = $pdo->query("SELECT * FROM nodes WHERE type != 'pmg'"); $updateList = [];
