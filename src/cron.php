@@ -2,9 +2,14 @@
 // /home/docker/pve_dashboard/src/cron.php
 require_once __DIR__ . '/db.php';
 
+// FIX 1: Harte Zeitzone für die PHP-CLI (überschreibt Docker UTC)
+date_default_timezone_set('Europe/Berlin');
+
 function isCronMatch($cron, $time = null) {
     if ($time === null) $time = time();
-    $cronParts = explode(' ', trim($cron));
+    
+    // FIX 2: Ignoriert beliebig viele Leerzeichen zwischen den Werten
+    $cronParts = preg_split('/\s+/', trim($cron));
     if (count($cronParts) !== 5) return false;
     
     list($min, $hour, $day, $month, $weekday) = $cronParts;
@@ -18,7 +23,10 @@ function isCronMatch($cron, $time = null) {
 
 function matchCronPart($part, $current) {
     if ($part === '*') return true;
-    if ($part === (string)(int)$current) return true;
+    
+    // FIX 3: Sauberer Integer-Vergleich für führende Nullen ("00" wird zu 0)
+    if (is_numeric($part) && (int)$part === (int)$current) return true;
+    
     if (strpos($part, '*/') === 0) { 
         $step = (int)substr($part, 2);
         return $step > 0 && ((int)$current % $step) === 0;
@@ -26,7 +34,7 @@ function matchCronPart($part, $current) {
     return false;
 }
 
-// Mini-Proxmox-Fetcher für das Cron-Skript (Mit Token-Auth für PVE!)
+// Mini-Proxmox-Fetcher für das Cron-Skript
 function cronProxmoxData($ip, $tokenId, $tokenSecret, $endpoint, $method = "POST", $postData = null) {
     $headers = ["Authorization: PVEAPIToken={$tokenId}={$tokenSecret}"];
     $ch = curl_init("https://{$ip}:8006{$endpoint}");
