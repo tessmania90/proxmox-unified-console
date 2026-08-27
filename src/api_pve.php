@@ -18,7 +18,6 @@ if ($action === 'get_stats') {
         $nData = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes");
         if (isset($nData['data'])) {
             foreach ($nData['data'] as $nInfo) {
-                // Duplikate (z.B. in Clustern) vermeiden
                 if (!isset($seenNodes[$nInfo['node']])) {
                     $seenNodes[$nInfo['node']] = true;
                     
@@ -48,7 +47,6 @@ if ($action === 'get_stats') {
             }
         }
         
-        // VMs von allen angebundenen Hosts ziehen und Duplikate filtern
         $vms = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/cluster/resources?type=vm");
         if (isset($vms['data'])) {
             foreach($vms['data'] as $vm) {
@@ -324,13 +322,14 @@ if ($action === 'restore_backup') {
 
 if ($action === 'get_node_status' || $action === 'get_vm_status') {
     $stmt = $pdo->prepare("SELECT * FROM nodes WHERE id = ?"); $stmt->execute([$_GET['node_id']]); $node = $stmt->fetch(PDO::FETCH_ASSOC);
+    $type = $node['type'] ?? 'pve';
     
     if ($action === 'get_node_status') {
-        $nData = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes");
-        $internalName = $nData['data'][0]['node'] ?? 'pve';
+        $nData = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes", $type);
+        $internalName = $nData['data'][0]['node'] ?? ($type === 'pbs' ? 'localhost' : 'pve');
         
-        $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$internalName}/status");
-        $rrd = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$internalName}/rrddata?timeframe=hour&cf=AVERAGE");
+        $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$internalName}/status", $type);
+        $rrd = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes/{$internalName}/rrddata?timeframe=hour&cf=AVERAGE", $type);
         
         $netin = 0; $netout = 0;
         if (isset($rrd['data']) && is_array($rrd['data'])) {
@@ -351,7 +350,7 @@ if ($action === 'get_node_status' || $action === 'get_vm_status') {
         echo json_encode(['success' => true, 'data' => $data]); exit;
     } else {
         $endpoint = "/api2/json/nodes/{$_GET['host']}/{$_GET['type']}/{$_GET['vmid']}/status/current";
-        $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], $endpoint);
+        $res = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], $endpoint, $type);
         echo json_encode(['success' => true, 'data' => $res['data'] ?? []]); exit;
     }
 }
@@ -364,7 +363,6 @@ if ($action === 'get_historical_rrd') {
     $type = $node['type'] ?? 'pve';
     
     if ($_GET['target_mode'] === 'node') {
-        // Internen Node-Namen von Proxmox auflösen, da der Datenbank-Name sonst zu einem 404 Fehler führt
         $nData = getProxmoxData($node['ip_address'], $node['token_id'], $node['token_secret'], "/api2/json/nodes", $type);
         $internalName = $nData['data'][0]['node'] ?? 'localhost';
         $endpoint = "/api2/json/nodes/{$internalName}/rrddata?timeframe={$timeframe}&cf=AVERAGE";
