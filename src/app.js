@@ -43,6 +43,13 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         if(tab === 'pbs') fetchPbsStats(); if(tab === 'pmg') fetchPmgStats();
     }
 
+    // HAUPT-GRAPHEN WIEDER HERGESTELLT
+    const ctx = document.getElementById('liveChart')?.getContext('2d'); let liveChart;
+    if(ctx) { liveChart = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ label: 'CPU (%)', borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 2, tension: 0.4, fill: true, data: [] }, { label: 'RAM (%)', borderColor: '#E57000', backgroundColor: 'rgba(229, 112, 0, 0.1)', borderWidth: 2, tension: 0.4, fill: true, data: [] }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 }, scales: { x: { ticks: { color: '#9ca3af' }, grid: { color: '#33334d' } }, y: { min: 0, max: 100, ticks: { color: '#9ca3af', callback: v => v + '%' }, grid: { color: '#33334d' } } }, plugins: { legend: { labels: { color: '#e2e8f0', usePointStyle: true } } } } }); }
+
+    const ctxNet = document.getElementById('liveNetChart')?.getContext('2d'); let liveNetChart;
+    if(ctxNet) { liveNetChart = new Chart(ctxNet, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 }, scales: { x: { ticks: { color: '#9ca3af' }, grid: { color: '#33334d' } }, y: { min: 0, ticks: { color: '#9ca3af' }, grid: { color: '#33334d' } } }, plugins: { legend: { labels: { color: '#e2e8f0', usePointStyle: true } } } } }); }
+
     let prevGlobalTime = null;
 
     async function fetchGlobalStats() { 
@@ -61,6 +68,33 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                     if(document.getElementById('stat-vms-total')) document.getElementById('stat-vms-total').innerText = d.cluster_stats.vms_total;
                     if(document.getElementById('stat-vms-run')) document.getElementById('stat-vms-run').innerText = d.cluster_stats.vms_running;
                     if(document.getElementById('stat-vms-stop')) document.getElementById('stat-vms-stop').innerText = d.cluster_stats.vms_stopped;
+                }
+
+                if(liveChart) { 
+                    const now = new Date(); 
+                    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0'); 
+                    liveChart.data.labels.push(timeStr); 
+                    liveChart.data.datasets[0].data.push(d.cpu_percent); 
+                    liveChart.data.datasets[1].data.push(ramPercent.toFixed(1)); 
+                    if (liveChart.data.labels.length > 15) { liveChart.data.labels.shift(); liveChart.data.datasets[0].data.shift(); liveChart.data.datasets[1].data.shift(); } 
+                    liveChart.update(); 
+                    
+                    if(liveNetChart && d.nodes_net) { 
+                        const nowTs = Date.now(); 
+                        if (prevGlobalTime !== null) { 
+                            liveNetChart.data.labels.push(timeStr); 
+                            if (liveNetChart.data.labels.length > 15) liveNetChart.data.labels.shift(); 
+                            const colors = ['#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4']; 
+                            d.nodes_net.forEach((n, idx) => { 
+                                let rxSpeed = n.netin / (1024 * 1024); let txSpeed = n.netout / (1024 * 1024); let totalSpeed = (rxSpeed + txSpeed).toFixed(2); 
+                                let ds = liveNetChart.data.datasets.find(ds => ds.label === n.name); 
+                                if (!ds) { const c = colors[idx % colors.length]; ds = { label: n.name, borderColor: c, backgroundColor: c + '1a', borderWidth: 2, tension: 0.4, fill: true, data: new Array(Math.max(0, liveNetChart.data.labels.length - 1)).fill(0) }; liveNetChart.data.datasets.push(ds); } 
+                                ds.data.push(totalSpeed); if (ds.data.length > 15) ds.data.shift(); 
+                            }); 
+                            liveNetChart.update(); 
+                        } 
+                        prevGlobalTime = nowTs; 
+                    } 
                 }
             } 
         } catch (err) {} 
@@ -267,17 +301,12 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     window.checkCronAction = function() { const action = document.getElementById('cronAction').value; const vmBlock = document.getElementById('cronVmBlock'); if (action.includes('_vm')) vmBlock.classList.remove('hidden'); else vmBlock.classList.add('hidden'); }
     async function loadCronJobs() { const tbody = document.getElementById('cronTableBody'); tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-4 animate-pulse">Lade Jobs...</td></tr>'; try { const res = await (await fetch('api.php?action=get_cron_jobs')).json(); if (res.success) { tbody.innerHTML = ''; if(res.data.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-4">Keine geplanten Jobs.</td></tr>'; return; } res.data.forEach(job => { const lastRun = formatDate(job.last_run); const isActive = parseInt(job.is_active) === 1; const statusDot = isActive ? '<span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_5px_#22c55e]"></span> Aktiv' : '<span class="w-2 h-2 rounded-full bg-gray-600"></span> Pausiert'; const targetStr = job.action_type.includes('_vm') ? `VM ${job.target_vmid}` : 'Gesamter Host'; let actionStr = job.action_type; if(actionStr === 'reboot_node') actionStr = 'Host Reboot'; if(actionStr === 'start_vm') actionStr = 'VM Start'; if(actionStr === 'stop_vm') actionStr = 'VM Stop'; if(actionStr === 'reboot_vm') actionStr = 'VM Reboot'; tbody.innerHTML += `<tr class="hover:bg-darkcard/50 transition-colors border-b border-darkborder/50"><td class="px-4 py-3 whitespace-nowrap cursor-pointer" onclick="toggleCronJob(${job.id}, ${isActive ? 0 : 1})"><div class="flex items-center gap-2 text-xs font-bold text-gray-300 hover:text-white">${statusDot}</div></td><td class="px-4 py-3"><p class="text-white font-bold">${job.name}</p><p class="text-xs text-proxmox font-bold">${actionStr}</p></td><td class="px-4 py-3"><p class="text-gray-300">${job.node_name}</p><p class="text-xs text-gray-500">Ziel: ${targetStr}</p></td><td class="px-4 py-3 font-mono text-blue-400 font-bold tracking-widest">${job.cron_schedule}</td><td class="px-4 py-3 text-gray-400 whitespace-nowrap">${lastRun}</td><td class="px-4 py-3 text-right"><button onclick="deleteCronJob(${job.id})" class="text-red-500 hover:text-white px-2 py-1 bg-red-500/10 hover:bg-red-500 rounded text-xs font-bold transition-colors">Löschen</button></td></tr>`; }); } } catch(e) {} }
     
-    // NEU: Automatischer Cron-Builder im Hintergrund!
     const addCronForm = document.getElementById('addCronJobForm');
     if(addCronForm) {
         addCronForm.addEventListener('submit', async function(e) {
             e.preventDefault(); const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Speichere...';
-            
-            const timeVal = document.getElementById('cronTime').value; // z.B. "03:00"
-            const daysVal = document.getElementById('cronDays').value; // z.B. "*"
-            const [hour, minute] = timeVal.split(':');
-            const generatedCronStr = `${parseInt(minute, 10)} ${parseInt(hour, 10)} * * ${daysVal}`;
-
+            const timeVal = document.getElementById('cronTime').value; const daysVal = document.getElementById('cronDays').value; 
+            const [hour, minute] = timeVal.split(':'); const generatedCronStr = `${parseInt(minute, 10)} ${parseInt(hour, 10)} * * ${daysVal}`;
             const fd = new FormData(); fd.append('name', document.getElementById('cronName').value); fd.append('node_id', document.getElementById('cronNodeId').value); fd.append('action_type', document.getElementById('cronAction').value); fd.append('target_vmid', document.getElementById('cronTargetVmid').value); fd.append('cron_schedule', generatedCronStr);
             try { const res = await (await fetch('api.php?action=add_cron_job', {method: 'POST', body: fd})).json(); if(res.success) { addCronForm.reset(); document.getElementById('cronTime').value = '03:00'; checkCronAction(); loadCronJobs(); } else alert('Fehler.'); } catch(e) {} finally { btn.innerText = oTxt; }
         });
