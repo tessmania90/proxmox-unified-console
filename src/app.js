@@ -1,14 +1,14 @@
 // /home/docker/pve_dashboard/src/app.js
 
 // ---------------------------------------------------------
-// 1. HILFSFUNKTIONEN (Immer zuerst laden)
+// 1. HILFSFUNKTIONEN
 // ---------------------------------------------------------
 function formatBytes(bytes) { if (!bytes || bytes === 0) return '0 GB'; const k = 1024, sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; }
 function formatDate(timestamp) { if (!timestamp || timestamp === 0) return 'Nie'; const d = new Date(timestamp * 1000); return d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE'); }
 async function logout() { await fetch('api.php?action=logout'); window.location.href = window.location.pathname + '?t=' + Date.now(); }
 
 // ---------------------------------------------------------
-// 2. GLOBALE CHART OBJEKTE
+// 2. GLOBALE VARIABLEN & CHARTS
 // ---------------------------------------------------------
 let liveChart = null;
 let liveNetChart = null;
@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ---------------------------------------------------------
-// 3. LOGIN & SETUP ROUTING (Mit Debugging)
+// 3. LOGIN & SETUP ROUTING
 // ---------------------------------------------------------
 if (!window.APP.isLoggedIn) {
     const loginForm = document.getElementById('loginForm');
@@ -41,14 +41,12 @@ if (!window.APP.isLoggedIn) {
             fd.append('username', document.getElementById('loginUser').value);
             fd.append('password', document.getElementById('loginPass').value);
             try {
-                // Wir laden den Response erst als reinen Text, um eventuelle PHP-Fehler abzufangen
                 const response = await fetch('api.php?action=login', { method: 'POST', body: fd });
                 const text = await response.text(); 
                 try {
                     const res = JSON.parse(text);
                     if(res.success) {
                         btn.innerText = 'Erfolgreich! Lade...';
-                        // Cache-Busting zwingt den Browser zum Neuladen
                         window.location.href = window.location.pathname + '?t=' + Date.now(); 
                     } else {
                         alert(res.error);
@@ -70,20 +68,18 @@ if (!window.APP.isLoggedIn) {
 }
 
 // ---------------------------------------------------------
-// 4. MAIN APP LOGIC (Nur wenn eingeloggt und Nodes da sind)
+// 4. MAIN APP LOGIC
 // ---------------------------------------------------------
 if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     
-    // UI Helpers (Audit Log Button Injection)
     if (window.APP.username === 'admin' || document.querySelector('a[onclick="openUserManager()"]')) {
         const userBtn = document.querySelector('a[onclick="openUserManager()"]');
         if (userBtn && !document.getElementById('btnAuditLog')) {
-            const auditBtnHTML = `<a href="#" id="btnAuditLog" onclick="openAuditLog()" class="flex items-center gap-3 text-gray-400 hover:text-white hover:bg-white/5 px-3 py-2 rounded-lg transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg> Audit Log</a>`;
+            const auditBtnHTML = `<a href="#" id="btnAuditLog" onclick="window.openAuditLog()" class="flex items-center gap-3 text-gray-400 hover:text-white hover:bg-white/5 px-3 py-2 rounded-lg transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg> Audit Log</a>`;
             userBtn.insertAdjacentHTML('afterend', auditBtnHTML);
         }
     }
 
-    // Password Modal
     window.openPasswordModal = function() { const m = document.getElementById('passwordModal'); if(m) { m.classList.remove('hidden'); document.getElementById('changePasswordForm').reset(); } }
     window.closePasswordModal = function() { const m = document.getElementById('passwordModal'); if(m) m.classList.add('hidden'); }
     const pwdForm = document.getElementById('changePasswordForm');
@@ -97,7 +93,6 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         });
     }
 
-    // Sidebar Nodes laden
     async function loadSidebarNodes() {
         const container = document.getElementById('sidebar-pve-nodes'); if(!container) return;
         try {
@@ -112,7 +107,6 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     }
     loadSidebarNodes();
 
-    // Tab Switching System
     window.switchTab = function(tab) {
         ['pve', 'pbs', 'pmg', 'node-view'].forEach(t => { 
             const el = document.getElementById('tab-' + t); 
@@ -126,11 +120,10 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
             } 
         });
         document.querySelectorAll('[id^="nav-node-"]').forEach(el => el.classList.remove('text-white', 'font-bold'));
-        if(tab === 'pbs') window.fetchPbsStats(); 
-        if(tab === 'pmg') window.fetchPmgStats();
+        if(tab === 'pbs' && typeof window.fetchPbsStats === 'function') window.fetchPbsStats(); 
+        if(tab === 'pmg' && typeof window.fetchPmgStats === 'function') window.fetchPmgStats();
     }
 
-    // Node-Specific Dashboard (PVE)
     window.openNodeView = async function(nodeId, host) {
         window.switchTab('node-view');
         document.querySelectorAll('[id^="nav-node-"]').forEach(el => el.classList.remove('text-white', 'font-bold'));
@@ -189,7 +182,107 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         } catch(e) {}
     }
 
-    // Graph & Performance Modal
+    // --- DASHBOARD API POLLING FUNKTIONEN ---
+    window.fetchGlobalStats = async function() { 
+        const tabEl = document.getElementById('tab-pve');
+        if(!tabEl || tabEl.classList.contains('hidden')) return; // Abbruch, wenn nicht im globalen Dashboard
+        
+        try { 
+            const res = await (await fetch('api.php?action=get_stats')).json(); 
+            if(res.success && res.data) { 
+                const d = res.data; 
+                const cpuText = document.getElementById('stat-cpu-text');
+                if(cpuText) cpuText.innerText = `${d.cpu_percent}% (${d.cpu_cores} Cores)`; 
+                
+                const cpuBar = document.getElementById('stat-cpu-bar');
+                if(cpuBar) cpuBar.style.width = `${d.cpu_percent}%`; 
+                
+                let ramPercent = (d.ram_used / d.ram_total) * 100 || 0; 
+                const ramText = document.getElementById('stat-ram-text');
+                if(ramText) ramText.innerText = `${formatBytes(d.ram_used)} / ${formatBytes(d.ram_total)}`; 
+                
+                const ramBar = document.getElementById('stat-ram-bar');
+                if(ramBar) ramBar.style.width = `${ramPercent}%`; 
+                
+                let diskPercent = (d.disk_used / d.disk_total) * 100 || 0; 
+                const diskText = document.getElementById('stat-disk-text');
+                if(diskText) diskText.innerText = `${formatBytes(d.disk_used)} / ${formatBytes(d.disk_total)}`; 
+                
+                const diskBar = document.getElementById('stat-disk-bar');
+                if(diskBar) diskBar.style.width = `${diskPercent}%`; 
+                
+                if (d.cluster_stats) {
+                    const elNodesOn = document.getElementById('stat-nodes-online');
+                    if (elNodesOn) { elNodesOn.innerText = d.cluster_stats.nodes_online; elNodesOn.className = (d.cluster_stats.nodes_online < d.cluster_stats.nodes_total) ? 'text-red-500' : 'text-green-500'; }
+                    const elNodesTotal = document.getElementById('stat-nodes-total');
+                    if(elNodesTotal) elNodesTotal.innerText = d.cluster_stats.nodes_total;
+                    const elVmsTotal = document.getElementById('stat-vms-total');
+                    if(elVmsTotal) elVmsTotal.innerText = d.cluster_stats.vms_total;
+                    const elVmsRun = document.getElementById('stat-vms-run');
+                    if(elVmsRun) elVmsRun.innerText = d.cluster_stats.vms_running;
+                    const elVmsStop = document.getElementById('stat-vms-stop');
+                    if(elVmsStop) elVmsStop.innerText = d.cluster_stats.vms_stopped;
+                }
+
+                if(liveChart) { 
+                    const now = new Date(); const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0'); 
+                    liveChart.data.labels.push(timeStr); liveChart.data.datasets[0].data.push(d.cpu_percent); liveChart.data.datasets[1].data.push(ramPercent.toFixed(1)); 
+                    if (liveChart.data.labels.length > 15) { liveChart.data.labels.shift(); liveChart.data.datasets[0].data.shift(); liveChart.data.datasets[1].data.shift(); } liveChart.update(); 
+                    
+                    if(liveNetChart && d.nodes_net) { 
+                        const nowTs = Date.now(); 
+                        if (prevGlobalTime !== null) { 
+                            liveNetChart.data.labels.push(timeStr); if (liveNetChart.data.labels.length > 15) liveNetChart.data.labels.shift(); 
+                            const colors = ['#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4']; 
+                            d.nodes_net.forEach((n, idx) => { 
+                                let rxSpeed = n.netin / (1024 * 1024); let txSpeed = n.netout / (1024 * 1024); let totalSpeed = (rxSpeed + txSpeed).toFixed(2); 
+                                let ds = liveNetChart.data.datasets.find(ds => ds.label === n.name); 
+                                if (!ds) { const c = colors[idx % colors.length]; ds = { label: n.name, borderColor: c, backgroundColor: c + '1a', borderWidth: 2, tension: 0.4, fill: true, data: new Array(Math.max(0, liveNetChart.data.labels.length - 1)).fill(0) }; liveNetChart.data.datasets.push(ds); } 
+                                ds.data.push(totalSpeed); if (ds.data.length > 15) ds.data.shift(); 
+                            }); 
+                            liveNetChart.update(); 
+                        } prevGlobalTime = nowTs; 
+                    } 
+                }
+            } 
+        } catch (err) {} 
+    }
+
+    window.fetchTopVms = async function() { 
+        const container = document.getElementById('top-vms-container');
+        const tabEl = document.getElementById('tab-pve');
+        if(!container || !tabEl || tabEl.classList.contains('hidden')) return; 
+        
+        try { 
+            const res = await (await fetch('api.php?action=get_top_vms')).json(); 
+            if(res.success && res.data) { 
+                container.innerHTML = ''; 
+                if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktiven VMs.</p>'; return; } 
+                res.data.forEach((vm, i) => { 
+                    const cpuPercent = ((vm.cpu || 0) * 100).toFixed(1); const ramUsed = formatBytes(vm.mem || 0); const icon = vm.type === 'lxc' ? '📦' : '🖥️'; const numberColor = i === 0 ? 'text-red-500' : (i === 1 ? 'text-orange-400' : (i === 2 ? 'text-yellow-400' : 'text-gray-400')); 
+                    container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-transform hover:scale-[1.02] cursor-default"><div class="flex items-center gap-3"><span class="font-bold text-xl ${numberColor}">#${i + 1}</span><div><h4 class="text-white font-semibold text-sm truncate w-32">${icon} ${vm.name}</h4><p class="text-xs text-gray-500">Host: ${vm.host}</p></div></div><div class="text-right"><p class="text-proxmox font-bold text-sm">${cpuPercent}% CPU</p><p class="text-xs text-gray-400">${ramUsed} RAM</p></div></div>`; 
+                }); 
+            } 
+        } catch (err) {} 
+    }
+
+    window.fetchRecentJobs = async function() { 
+        const container = document.getElementById('recent-jobs-container');
+        if(!container) return; 
+        try { 
+            const res = await (await fetch('api.php?action=get_recent_jobs')).json(); 
+            if(res.success && res.data) { 
+                container.innerHTML = ''; 
+                if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktuellen Jobs.</p>'; return; } 
+                res.data.forEach(job => { 
+                    const jobTypeStr = job.type || job.worker_type || 'unknown'; let statusColor = 'text-gray-400', statusIcon = '⏳', statusText = job.status || 'running...'; if(statusText.toLowerCase() === 'ok') { statusColor = 'text-green-500'; statusIcon = '✅'; } else if(statusText !== 'running...') { statusColor = 'text-red-500'; statusIcon = '❌'; } else { statusColor = 'text-blue-400'; statusIcon = '🔄'; } const date = new Date(job.starttime * 1000); const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }), dateStr = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); const isBackup = jobTypeStr.includes('sync') || jobTypeStr.includes('prune') || jobTypeStr.includes('garbage_collection') || jobTypeStr.includes('vzdump') || jobTypeStr.includes('verify'); const jobTypeColor = isBackup ? 'text-purple-400' : 'text-white'; 
+                    container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-colors hover:bg-darkborder/50"><div class="flex items-center gap-3"><div class="text-lg">${statusIcon}</div><div class="max-w-[120px]"><p class="${jobTypeColor} font-medium text-sm capitalize truncate" title="${jobTypeStr}">${jobTypeStr}</p><p class="text-xs text-gray-500 truncate" title="${job.node_name}">Host: <span class="text-proxmox">${job.node_name}</span></p></div></div><div class="text-right"><p class="${statusColor} font-bold text-sm uppercase">${statusText}</p><p class="text-xs text-gray-500">${dateStr} - ${timeStr}</p></div></div>`; 
+                }); 
+            } 
+        } catch (err) {} 
+    }
+
+    // --- GRAPHS & MODALS ---
     window.openLiveGraph = function(targetMode, vmid, host, nodeId, name) {
         const m = document.getElementById('liveGraphModal');
         if(!m) return;
@@ -271,7 +364,6 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         }
     }
 
-    // Node Backups Modal
     window.openNodeBackups = async function(nodeId, host) {
         const m = document.getElementById('nodeBackupsModal');
         if(!m) return;
@@ -299,7 +391,6 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     }
     window.closeNodeBackups = function() { const m = document.getElementById('nodeBackupsModal'); if(m) m.classList.add('hidden'); }
 
-    // VM Erstellung
     window.openCreateVm = async function() { 
         const m = document.getElementById('createVmModal'); if(!m) return;
         m.classList.remove('hidden'); 
@@ -320,69 +411,27 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     }
     window.closeCreateVm = function() { const m = document.getElementById('createVmModal'); if(m) m.classList.add('hidden'); }
 
-    // Global Stats Polling (Cluster Dashboard)
-    window.fetchGlobalStats = async function() { 
-        if(document.getElementById('tab-pve') && document.getElementById('tab-pve').classList.contains('hidden')) return;
-        try { 
-            const res = await (await fetch('api.php?action=get_stats')).json(); 
-            if(res.success && res.data) { 
-                const d = res.data; 
-                if(document.getElementById('stat-cpu-text')) document.getElementById('stat-cpu-text').innerText = `${d.cpu_percent}% (${d.cpu_cores} Cores)`; 
-                if(document.getElementById('stat-cpu-bar')) document.getElementById('stat-cpu-bar').style.width = `${d.cpu_percent}%`; 
-                let ramPercent = (d.ram_used / d.ram_total) * 100 || 0; 
-                if(document.getElementById('stat-ram-text')) document.getElementById('stat-ram-text').innerText = `${formatBytes(d.ram_used)} / ${formatBytes(d.ram_total)}`; 
-                if(document.getElementById('stat-ram-bar')) document.getElementById('stat-ram-bar').style.width = `${ramPercent}%`; 
-                let diskPercent = (d.disk_used / d.disk_total) * 100 || 0; 
-                if(document.getElementById('stat-disk-text')) document.getElementById('stat-disk-text').innerText = `${formatBytes(d.disk_used)} / ${formatBytes(d.disk_total)}`; 
-                if(document.getElementById('stat-disk-bar')) document.getElementById('stat-disk-bar').style.width = `${diskPercent}%`; 
-                
-                if (d.cluster_stats) {
-                    const elNodesOn = document.getElementById('stat-nodes-online');
-                    if (elNodesOn) { elNodesOn.innerText = d.cluster_stats.nodes_online; elNodesOn.className = (d.cluster_stats.nodes_online < d.cluster_stats.nodes_total) ? 'text-red-500' : 'text-green-500'; }
-                    if(document.getElementById('stat-nodes-total')) document.getElementById('stat-nodes-total').innerText = d.cluster_stats.nodes_total;
-                    if(document.getElementById('stat-vms-total')) document.getElementById('stat-vms-total').innerText = d.cluster_stats.vms_total;
-                    if(document.getElementById('stat-vms-run')) document.getElementById('stat-vms-run').innerText = d.cluster_stats.vms_running;
-                    if(document.getElementById('stat-vms-stop')) document.getElementById('stat-vms-stop').innerText = d.cluster_stats.vms_stopped;
-                }
-
-                if(liveChart) { 
-                    const now = new Date(); const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0'); 
-                    liveChart.data.labels.push(timeStr); liveChart.data.datasets[0].data.push(d.cpu_percent); liveChart.data.datasets[1].data.push(ramPercent.toFixed(1)); 
-                    if (liveChart.data.labels.length > 15) { liveChart.data.labels.shift(); liveChart.data.datasets[0].data.shift(); liveChart.data.datasets[1].data.shift(); } liveChart.update(); 
-                    
-                    if(liveNetChart && d.nodes_net) { 
-                        const nowTs = Date.now(); 
-                        if (prevGlobalTime !== null) { 
-                            liveNetChart.data.labels.push(timeStr); if (liveNetChart.data.labels.length > 15) liveNetChart.data.labels.shift(); 
-                            const colors = ['#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4']; 
-                            d.nodes_net.forEach((n, idx) => { 
-                                let rxSpeed = n.netin / (1024 * 1024); let txSpeed = n.netout / (1024 * 1024); let totalSpeed = (rxSpeed + txSpeed).toFixed(2); 
-                                let ds = liveNetChart.data.datasets.find(ds => ds.label === n.name); 
-                                if (!ds) { const c = colors[idx % colors.length]; ds = { label: n.name, borderColor: c, backgroundColor: c + '1a', borderWidth: 2, tension: 0.4, fill: true, data: new Array(Math.max(0, liveNetChart.data.labels.length - 1)).fill(0) }; liveNetChart.data.datasets.push(ds); } 
-                                ds.data.push(totalSpeed); if (ds.data.length > 15) ds.data.shift(); 
-                            }); 
-                            liveNetChart.update(); 
-                        } prevGlobalTime = nowTs; 
-                    } 
-                }
-            } 
-        } catch (err) {} 
+    const createVmForm = document.getElementById('createVmForm');
+    if(createVmForm) { 
+        createVmForm.addEventListener('submit', async function(e) { 
+            e.preventDefault(); 
+            const hostDataStr = document.getElementById('createVmHost').value; 
+            if(!hostDataStr) return; 
+            const hostData = JSON.parse(hostDataStr); 
+            const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Richte VM ein...'; 
+            const fd = new FormData(); fd.append('node_id', hostData.id); fd.append('host', hostData.host); fd.append('name', document.getElementById('createVmName').value); fd.append('memory', document.getElementById('createVmRam').value); fd.append('cores', document.getElementById('createVmCores').value); 
+            try { 
+                const res = await (await fetch('api.php?action=create_vm', { method: 'POST', body: fd })).json(); 
+                if(res.success) { 
+                    alert(`Erfolgreich! VM-ID: ${res.vmid}`); createVmForm.reset(); window.closeCreateVm(); 
+                    if(window.currentSelectedHost === hostData.host && !document.getElementById('tab-node-view').classList.contains('hidden')) {
+                        window.openNodeView(hostData.id, hostData.host); 
+                    }
+                } else alert(res.error); 
+            } catch(e) {} finally { btn.innerText = oTxt; } 
+        }); 
     }
 
-    window.fetchTopVms = async function() { if(!document.getElementById('top-vms-container') || (document.getElementById('tab-pve') && document.getElementById('tab-pve').classList.contains('hidden'))) return; try { const res = await (await fetch('api.php?action=get_top_vms')).json(); if(res.success && res.data) { const container = document.getElementById('top-vms-container'); container.innerHTML = ''; if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktiven VMs.</p>'; return; } res.data.forEach((vm, i) => { const cpuPercent = ((vm.cpu || 0) * 100).toFixed(1); const ramUsed = formatBytes(vm.mem || 0); const icon = vm.type === 'lxc' ? '📦' : '🖥️'; const numberColor = i === 0 ? 'text-red-500' : (i === 1 ? 'text-orange-400' : (i === 2 ? 'text-yellow-400' : 'text-gray-400')); container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-transform hover:scale-[1.02] cursor-default"><div class="flex items-center gap-3"><span class="font-bold text-xl ${numberColor}">#${i + 1}</span><div><h4 class="text-white font-semibold text-sm truncate w-32">${icon} ${vm.name}</h4><p class="text-xs text-gray-500">Host: ${vm.host}</p></div></div><div class="text-right"><p class="text-proxmox font-bold text-sm">${cpuPercent}% CPU</p><p class="text-xs text-gray-400">${ramUsed} RAM</p></div></div>`; }); } } catch (err) {} }
-    window.fetchRecentJobs = async function() { if(!document.getElementById('recent-jobs-container')) return; try { const res = await (await fetch('api.php?action=get_recent_jobs')).json(); if(res.success && res.data) { const container = document.getElementById('recent-jobs-container'); container.innerHTML = ''; if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktuellen Jobs.</p>'; return; } res.data.forEach(job => { const jobTypeStr = job.type || job.worker_type || 'unknown'; let statusColor = 'text-gray-400', statusIcon = '⏳', statusText = job.status || 'running...'; if(statusText.toLowerCase() === 'ok') { statusColor = 'text-green-500'; statusIcon = '✅'; } else if(statusText !== 'running...') { statusColor = 'text-red-500'; statusIcon = '❌'; } else { statusColor = 'text-blue-400'; statusIcon = '🔄'; } const date = new Date(job.starttime * 1000); const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }), dateStr = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); const isBackup = jobTypeStr.includes('sync') || jobTypeStr.includes('prune') || jobTypeStr.includes('garbage_collection') || jobTypeStr.includes('vzdump') || jobTypeStr.includes('verify'); const jobTypeColor = isBackup ? 'text-purple-400' : 'text-white'; container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-colors hover:bg-darkborder/50"><div class="flex items-center gap-3"><div class="text-lg">${statusIcon}</div><div class="max-w-[120px]"><p class="${jobTypeColor} font-medium text-sm capitalize truncate" title="${jobTypeStr}">${jobTypeStr}</p><p class="text-xs text-gray-500 truncate" title="${job.node_name}">Host: <span class="text-proxmox">${job.node_name}</span></p></div></div><div class="text-right"><p class="${statusColor} font-bold text-sm uppercase">${statusText}</p><p class="text-xs text-gray-500">${dateStr} - ${timeStr}</p></div></div>`; }); } } catch (err) {} }
-
-    window.sendVmCommand = async function(vmid, host, type, cmd, nodeId) { 
-        if(!confirm(`Maschine '${vmid}' wirklich ${cmd}?`)) return; 
-        const fd = new FormData(); fd.append('vmid', vmid); fd.append('host', host); fd.append('type', type); fd.append('cmd', cmd); fd.append('node_id', nodeId); 
-        try { 
-            const res = await (await fetch('api.php?action=vm_action', { method: 'POST', body: fd })).json(); 
-            if(res.success) { setTimeout(() => { if(window.currentSelectedHost === host && !document.getElementById('tab-node-view').classList.contains('hidden')) { window.openNodeView(nodeId, host); } else if(typeof window.loadVmsIntoTable === 'function') { window.loadVmsIntoTable(); } }, 2000); } 
-            else alert(res.error); 
-        } catch (err) {} 
-    }
-
-    // VM Settings Modal
     window.openVmSettings = async function(vmid, host, type, nodeId, name) { 
         const m = document.getElementById('vmSettingsModal'); if(!m) return;
         m.classList.remove('hidden'); 
@@ -456,25 +505,25 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         } catch (e) {} 
     }
     window.closeVmSettings = function() { const m = document.getElementById('vmSettingsModal'); if(m) m.classList.add('hidden'); }
-    window.saveHardwareSettings = async function() { 
-        const fd = new FormData(); 
-        fd.append('vmid', document.getElementById('setVmid').value); fd.append('host', document.getElementById('setHost').value); fd.append('type', document.getElementById('setType').value); fd.append('node_id', document.getElementById('setNodeId').value); 
-        fd.append('memory', document.getElementById('setMemory').value); fd.append('cores', document.getElementById('setCores').value); 
-        fd.append('onboot', document.getElementById('setOnboot').checked ? 1 : 0);
-        if(document.getElementById('setType').value === 'qemu') { fd.append('ide2', document.getElementById('setIso').value); }
-        
-        const res = await (await fetch('api.php?action=update_vm_config', { method: 'POST', body: fd })).json(); 
-        if(res.success) { alert('Gespeichert!'); if(window.currentSelectedHost) window.openNodeView(fd.get('node_id'), fd.get('host')); } else alert(res.error); 
+
+    window.sendVmCommand = async function(vmid, host, type, cmd, nodeId) { 
+        if(!confirm(`Maschine '${vmid}' wirklich ${cmd}?`)) return; 
+        const fd = new FormData(); fd.append('vmid', vmid); fd.append('host', host); fd.append('type', type); fd.append('cmd', cmd); fd.append('node_id', nodeId); 
+        try { 
+            const res = await (await fetch('api.php?action=vm_action', { method: 'POST', body: fd })).json(); 
+            if(res.success) { setTimeout(() => { if(window.currentSelectedHost === host && !document.getElementById('tab-node-view').classList.contains('hidden')) { window.openNodeView(nodeId, host); } else if(typeof window.loadVmsIntoTable === 'function') { window.loadVmsIntoTable(); } }, 2000); } 
+            else alert(res.error); 
+        } catch (err) {} 
     }
 
-    // --- WEITERE PBS FUNKTIONEN ---
+    // --- PBS FUNKTIONEN ---
     window.fetchPbsStats = async function() { if(document.getElementById('tab-pbs') && document.getElementById('tab-pbs').classList.contains('hidden')) return; try { const res = await (await fetch('api.php?action=get_pbs_stats')).json(); if(res.success) { const container = document.getElementById('pbs-datastores-container'); if(!container) return; if(res.data.length === 0) { container.innerHTML = '<div class="col-span-full text-center text-gray-500 p-10 bg-darkcard rounded-lg border border-darkborder">Keine PBS Server gefunden.</div>'; return; } container.innerHTML = ''; res.data.forEach(ds => { const total = ds.total || 0; const used = ds.used || 0; const percent = total > 0 ? ((used / total) * 100).toFixed(1) : 0; const colorClass = percent > 85 ? 'bg-red-500' : (percent > 70 ? 'bg-orange-500' : 'bg-pbs'); container.innerHTML += `<div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg hover:border-pbs cursor-pointer transition-colors" onclick="window.openPbsDatastore(${ds.node_id}, '${ds.store}')"><div class="flex justify-between items-start mb-4"><div><h3 class="text-lg font-bold text-white">${ds.store}</h3><p class="text-xs text-gray-400">PBS Host: ${ds.host}</p></div><div class="p-2 bg-purple-500/10 rounded-lg"><svg class="w-6 h-6 text-pbs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg></div></div><div class="mb-2 flex justify-between text-sm"><span class="text-gray-400">Auslastung</span><span class="text-white font-bold">${percent}%</span></div><div class="w-full bg-darkbg rounded-full h-2 mb-3"><div class="${colorClass} h-2 rounded-full transition-all duration-1000" style="width: ${percent}%"></div></div><div class="flex justify-between text-xs text-gray-500"><span>Used: ${formatBytes(used)}</span><span>Total: ${formatBytes(total)}</span></div></div>`; }); } } catch(e) {} }
-    window.openPbsDatastore = async function(nodeId, storeName) { if (!nodeId) return alert('Node ID fehlt.'); const m = document.getElementById('pbsDatastoreModal'); if(!m) return; m.classList.remove('hidden'); document.getElementById('pbsModalTitle').innerText = 'Datastore: ' + storeName; document.getElementById('pbsNodeId').value = nodeId; document.getElementById('pbsStoreName').value = storeName; loadPbsBackups(nodeId, storeName); loadPbsJobs(nodeId, storeName); loadPbsSyncJobs(nodeId); }
+    window.openPbsDatastore = async function(nodeId, storeName) { if (!nodeId) return alert('Node ID fehlt.'); const m = document.getElementById('pbsDatastoreModal'); if(!m) return; m.classList.remove('hidden'); document.getElementById('pbsModalTitle').innerText = 'Datastore: ' + storeName; document.getElementById('pbsNodeId').value = nodeId; document.getElementById('pbsStoreName').value = storeName; window.loadPbsBackups(nodeId, storeName); window.loadPbsJobs(nodeId, storeName); window.loadPbsSyncJobs(nodeId); }
     window.closePbsDatastore = function() { const m = document.getElementById('pbsDatastoreModal'); if(m) m.classList.add('hidden'); }
-    async function loadPbsBackups(nodeId, storeName) { const container = document.getElementById('pbsBackupsContainer'); if(!container) return; container.innerHTML = '<p class="text-gray-500 animate-pulse">Durchsuche Namespaces nach Backups...</p>'; try { const res = await (await fetch(`api.php?action=pbs_get_datastore_content&node_id=${nodeId}&store=${storeName}`)).json(); if(res.success && res.data) { if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-500 text-sm">Keine Backups vorhanden.</p>'; return; } container.innerHTML = ''; res.data.sort((a,b) => b['backup-time'] - a['backup-time']).forEach(b => { const timeStr = formatDate(b['backup-time']); const sizeStr = formatBytes(b.size); const nsLabel = b.ns ? `<span class="text-pbs font-normal ml-2">[${b.ns}]</span>` : `<span class="text-gray-500 font-normal ml-2">[Root]</span>`; container.innerHTML += `<div class="flex justify-between items-center bg-darkbg p-2 border border-darkborder rounded mb-2 hover:border-pbs transition-colors"><div><p class="text-white text-xs font-bold">${b['backup-type']} / ${b['backup-id']} ${nsLabel}</p><p class="text-xs text-gray-500">${timeStr} | ${sizeStr}</p></div><button onclick="window.deletePbsSnapshot('${b['backup-type']}', '${b['backup-id']}', ${b['backup-time']}, '${b.ns || ''}')" class="text-red-500 hover:text-white text-xs font-bold px-3 py-1 bg-red-500/10 hover:bg-red-500 rounded transition-colors">Löschen</button></div>`; }); } } catch(e) { container.innerHTML = 'Fehler beim Laden.'; } }
-    window.deletePbsSnapshot = async function(btype, bid, btime, ns) { if(!confirm(`Backup ${btype}/${bid} wirklich löschen?`)) return; const fd = new FormData(); fd.append('node_id', document.getElementById('pbsNodeId').value); fd.append('store', document.getElementById('pbsStoreName').value); fd.append('btype', btype); fd.append('bid', bid); fd.append('btime', btime); fd.append('ns', ns); const res = await (await fetch('api.php?action=pbs_delete_snapshot', {method: 'POST', body: fd})).json(); if(res.success) { loadPbsBackups(document.getElementById('pbsNodeId').value, document.getElementById('pbsStoreName').value); } else alert('Fehler beim Löschen.'); }
-    async function loadPbsJobs(nodeId, storeName) { const mixCont = document.getElementById('pbsVerifyGcContainer'); if(!mixCont) return; mixCont.innerHTML = '<p class="text-gray-500 animate-pulse">Lade System-Jobs...</p>'; const table = document.getElementById('pbsJobsTable'); table.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Lade Historie...</td></tr>'; try { const res = await (await fetch(`api.php?action=pbs_get_jobs&node_id=${nodeId}`)).json(); if(res.success && res.data) { mixCont.innerHTML = ''; table.innerHTML = ''; let mixCount = 0; res.data.sort((a,b) => b.starttime - a.starttime).forEach(job => { const statusColor = job.status === 'OK' ? 'text-green-500' : (job.status ? 'text-red-500' : 'text-blue-400'); const timeStr = formatDate(job.starttime); const runtime = job.endtime ? (Math.round(job.endtime - job.starttime) + 's') : 'Running...'; const isSystemJob = job.worker_type === 'verify' || job.worker_type === 'garbage_collection' || job.worker_type === 'prune'; if (isSystemJob && mixCount < 6) { mixCont.innerHTML += `<div class="flex justify-between items-center bg-darkbg p-2 border border-darkborder rounded mb-1"><div><p class="text-white text-xs font-bold uppercase">${job.worker_type}</p><p class="text-xs text-gray-500">${timeStr}</p></div><div class="flex items-center gap-2"><span class="${statusColor} font-bold text-xs uppercase mr-2">${job.status || 'Active'}</span><button onclick="window.openTaskLog('${job.upid}', ${nodeId}, 'localhost')" class="text-gray-400 hover:text-white text-xs bg-darkcard px-2 py-1 rounded border border-darkborder transition-colors">📄 Log</button></div></div>`; mixCount++; } table.innerHTML += `<tr class="hover:bg-darkbg transition-colors border-b border-darkborder/50"><td class="px-4 py-2">${timeStr}</td><td class="px-4 py-2 font-medium text-white">${job.worker_type}</td><td class="px-4 py-2 ${statusColor} font-bold uppercase">${job.status || 'Active'}</td><td class="px-4 py-2">${runtime}</td><td class="px-4 py-2 text-right"><button onclick="window.openTaskLog('${job.upid}', ${nodeId}, 'localhost')" class="text-pbs hover:text-white font-bold text-xs transition-colors">Ansehen</button></td></tr>`; }); if(mixCount === 0) mixCont.innerHTML = '<p class="text-gray-500 text-xs italic">Keine System-Jobs gefunden.</p>'; if(res.data.length === 0) table.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Keine Historie gefunden.</td></tr>'; } } catch(e) {} }
-    async function loadPbsSyncJobs(nodeId) { const container = document.getElementById('pbsSyncContainer'); if(!container) return; container.innerHTML = '<p class="text-gray-500 animate-pulse">Lade Sync-Jobs...</p>'; try { const res = await (await fetch(`api.php?action=pbs_get_sync_jobs&node_id=${nodeId}`)).json(); if(res.success && res.data) { if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-500 text-sm">Keine Sync-Jobs eingerichtet.</p>'; return; } container.innerHTML = ''; res.data.forEach(sync => { container.innerHTML += `<div class="bg-darkbg p-3 border border-darkborder rounded mb-2 hover:border-blue-500 transition-colors"><h4 class="text-white text-sm font-bold truncate">${sync.id}</h4><p class="text-xs text-gray-400 mt-1">Quelle: <span class="text-blue-400">${sync.remote || 'Lokal'} -> ${sync['remote-store']}</span></p><p class="text-xs text-gray-400">Ziel: <span class="text-emerald-400">${sync.store}</span></p><div class="mt-2 text-xs text-gray-500 bg-darkcard p-1.5 rounded inline-block">Zeitplan: ${sync.schedule || 'Manuell'}</div></div>`; }); } } catch(e) { container.innerHTML = 'Fehler.'; } }
+    window.loadPbsBackups = async function(nodeId, storeName) { const container = document.getElementById('pbsBackupsContainer'); if(!container) return; container.innerHTML = '<p class="text-gray-500 animate-pulse">Durchsuche Namespaces nach Backups...</p>'; try { const res = await (await fetch(`api.php?action=pbs_get_datastore_content&node_id=${nodeId}&store=${storeName}`)).json(); if(res.success && res.data) { if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-500 text-sm">Keine Backups vorhanden.</p>'; return; } container.innerHTML = ''; res.data.sort((a,b) => b['backup-time'] - a['backup-time']).forEach(b => { const timeStr = formatDate(b['backup-time']); const sizeStr = formatBytes(b.size); const nsLabel = b.ns ? `<span class="text-pbs font-normal ml-2">[${b.ns}]</span>` : `<span class="text-gray-500 font-normal ml-2">[Root]</span>`; container.innerHTML += `<div class="flex justify-between items-center bg-darkbg p-2 border border-darkborder rounded mb-2 hover:border-pbs transition-colors"><div><p class="text-white text-xs font-bold">${b['backup-type']} / ${b['backup-id']} ${nsLabel}</p><p class="text-xs text-gray-500">${timeStr} | ${sizeStr}</p></div><button onclick="window.deletePbsSnapshot('${b['backup-type']}', '${b['backup-id']}', ${b['backup-time']}, '${b.ns || ''}')" class="text-red-500 hover:text-white text-xs font-bold px-3 py-1 bg-red-500/10 hover:bg-red-500 rounded transition-colors">Löschen</button></div>`; }); } } catch(e) { container.innerHTML = 'Fehler beim Laden.'; } }
+    window.deletePbsSnapshot = async function(btype, bid, btime, ns) { if(!confirm(`Backup ${btype}/${bid} wirklich löschen?`)) return; const fd = new FormData(); fd.append('node_id', document.getElementById('pbsNodeId').value); fd.append('store', document.getElementById('pbsStoreName').value); fd.append('btype', btype); fd.append('bid', bid); fd.append('btime', btime); fd.append('ns', ns); const res = await (await fetch('api.php?action=pbs_delete_snapshot', {method: 'POST', body: fd})).json(); if(res.success) { window.loadPbsBackups(document.getElementById('pbsNodeId').value, document.getElementById('pbsStoreName').value); } else alert('Fehler beim Löschen.'); }
+    window.loadPbsJobs = async function(nodeId, storeName) { const mixCont = document.getElementById('pbsVerifyGcContainer'); if(!mixCont) return; mixCont.innerHTML = '<p class="text-gray-500 animate-pulse">Lade System-Jobs...</p>'; const table = document.getElementById('pbsJobsTable'); table.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Lade Historie...</td></tr>'; try { const res = await (await fetch(`api.php?action=pbs_get_jobs&node_id=${nodeId}`)).json(); if(res.success && res.data) { mixCont.innerHTML = ''; table.innerHTML = ''; let mixCount = 0; res.data.sort((a,b) => b.starttime - a.starttime).forEach(job => { const statusColor = job.status === 'OK' ? 'text-green-500' : (job.status ? 'text-red-500' : 'text-blue-400'); const timeStr = formatDate(job.starttime); const runtime = job.endtime ? (Math.round(job.endtime - job.starttime) + 's') : 'Running...'; const isSystemJob = job.worker_type === 'verify' || job.worker_type === 'garbage_collection' || job.worker_type === 'prune'; if (isSystemJob && mixCount < 6) { mixCont.innerHTML += `<div class="flex justify-between items-center bg-darkbg p-2 border border-darkborder rounded mb-1"><div><p class="text-white text-xs font-bold uppercase">${job.worker_type}</p><p class="text-xs text-gray-500">${timeStr}</p></div><div class="flex items-center gap-2"><span class="${statusColor} font-bold text-xs uppercase mr-2">${job.status || 'Active'}</span><button onclick="window.openTaskLog('${job.upid}', ${nodeId}, 'localhost')" class="text-gray-400 hover:text-white text-xs bg-darkcard px-2 py-1 rounded border border-darkborder transition-colors">📄 Log</button></div></div>`; mixCount++; } table.innerHTML += `<tr class="hover:bg-darkbg transition-colors border-b border-darkborder/50"><td class="px-4 py-2">${timeStr}</td><td class="px-4 py-2 font-medium text-white">${job.worker_type}</td><td class="px-4 py-2 ${statusColor} font-bold uppercase">${job.status || 'Active'}</td><td class="px-4 py-2">${runtime}</td><td class="px-4 py-2 text-right"><button onclick="window.openTaskLog('${job.upid}', ${nodeId}, 'localhost')" class="text-pbs hover:text-white font-bold text-xs transition-colors">Ansehen</button></td></tr>`; }); if(mixCount === 0) mixCont.innerHTML = '<p class="text-gray-500 text-xs italic">Keine System-Jobs gefunden.</p>'; if(res.data.length === 0) table.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Keine Historie gefunden.</td></tr>'; } } catch(e) {} }
+    window.loadPbsSyncJobs = async function(nodeId) { const container = document.getElementById('pbsSyncContainer'); if(!container) return; container.innerHTML = '<p class="text-gray-500 animate-pulse">Lade Sync-Jobs...</p>'; try { const res = await (await fetch(`api.php?action=pbs_get_sync_jobs&node_id=${nodeId}`)).json(); if(res.success && res.data) { if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-500 text-sm">Keine Sync-Jobs eingerichtet.</p>'; return; } container.innerHTML = ''; res.data.forEach(sync => { container.innerHTML += `<div class="bg-darkbg p-3 border border-darkborder rounded mb-2 hover:border-blue-500 transition-colors"><h4 class="text-white text-sm font-bold truncate">${sync.id}</h4><p class="text-xs text-gray-400 mt-1">Quelle: <span class="text-blue-400">${sync.remote || 'Lokal'} -> ${sync['remote-store']}</span></p><p class="text-xs text-gray-400">Ziel: <span class="text-emerald-400">${sync.store}</span></p><div class="mt-2 text-xs text-gray-500 bg-darkcard p-1.5 rounded inline-block">Zeitplan: ${sync.schedule || 'Manuell'}</div></div>`; }); } } catch(e) { container.innerHTML = 'Fehler.'; } }
 
     // --- PMG FUNKTIONEN ---
     window.fetchPmgStats = async function() { if(document.getElementById('tab-pmg') && document.getElementById('tab-pmg').classList.contains('hidden')) return; try { const res = await (await fetch('api.php?action=get_pmg_stats')).json(); if(res.success) { const container = document.getElementById('pmg-nodes-container'); if(!container) return; if(res.data.length === 0) { container.innerHTML = '<div class="col-span-full text-center text-gray-500 p-10 bg-darkcard rounded-lg border border-darkborder">Keine Mail Gateways angebunden.</div>'; return; } container.innerHTML = ''; res.data.forEach(pmg => { const cpuPercent = ((pmg.cpu || 0) * 100).toFixed(1); const ramPercent = pmg.memory && pmg.memory.total ? ((pmg.memory.used / pmg.memory.total) * 100).toFixed(1) : 0; const diskPercent = pmg.rootfs && pmg.rootfs.total ? ((pmg.rootfs.used / pmg.rootfs.total) * 100).toFixed(1) : 0; container.innerHTML += `<div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg hover:border-pmg cursor-pointer transition-colors" onclick="window.openPmgManager(${pmg.node_id}, '${pmg.host}', '${pmg.internal_name}')"><div class="flex justify-between items-start mb-4"><div><h3 class="text-lg font-bold text-white">${pmg.host}</h3><p class="text-xs text-green-400">Online</p></div><div class="p-2 bg-blue-500/10 rounded-lg"><svg class="w-6 h-6 text-pmg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg></div></div><div class="mb-1 flex justify-between text-xs"><span class="text-gray-400">CPU</span><span class="text-white font-bold">${cpuPercent}%</span></div><div class="w-full bg-darkbg rounded-full h-1.5 mb-3"><div class="bg-blue-500 h-1.5 rounded-full" style="width: ${cpuPercent}%"></div></div><div class="mb-1 flex justify-between text-xs"><span class="text-gray-400">RAM</span><span class="text-white font-bold">${ramPercent}%</span></div><div class="w-full bg-darkbg rounded-full h-1.5 mb-3"><div class="bg-proxmox h-1.5 rounded-full" style="width: ${ramPercent}%"></div></div><div class="mb-1 flex justify-between text-xs"><span class="text-gray-400">System Disk</span><span class="text-white font-bold">${diskPercent}%</span></div><div class="w-full bg-darkbg rounded-full h-1.5"><div class="bg-emerald-500 h-1.5 rounded-full" style="width: ${diskPercent}%"></div></div></div>`; }); } } catch(e) {} }
@@ -543,10 +592,10 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
             } 
         } catch (err) {}
     }
-    window.deleteNode = async function(id, name) { if(!confirm(`Server '${name}' löschen?`)) return; const fd = new FormData(); fd.append('id', id); await fetch('api.php?action=delete_node', { method: 'POST', body: fd }); window.loadNodesIntoTable(); loadSidebarNodes(); }
+    window.deleteNode = async function(id, name) { if(!confirm(`Server '${name}' löschen?`)) return; const fd = new FormData(); fd.append('id', id); await fetch('api.php?action=delete_node', { method: 'POST', body: fd }); window.loadNodesIntoTable(); window.loadSidebarNodes(); }
     
     const addNewNodeForm = document.getElementById('addNewNodeForm');
-    if(addNewNodeForm) { addNewNodeForm.addEventListener('submit', async function(e) { e.preventDefault(); const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Verbinde...'; const fd = new FormData(); fd.append('name', document.getElementById('newNodeName').value); fd.append('ip', document.getElementById('newNodeIp').value); fd.append('user', document.getElementById('newNodeUser').value); fd.append('pass', document.getElementById('newNodePass').value); fd.append('type', document.getElementById('newNodeType').value); try { const res = await (await fetch('api.php?action=add_node', { method: 'POST', body: fd })).json(); if(res.success) { addNewNodeForm.reset(); window.toggleAddNodeForm(); window.loadNodesIntoTable(); loadSidebarNodes(); alert('Erfolgreich angebunden!'); } else alert(res.error); } catch(err) {} btn.innerText = oTxt; }); }
+    if(addNewNodeForm) { addNewNodeForm.addEventListener('submit', async function(e) { e.preventDefault(); const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Verbinde...'; const fd = new FormData(); fd.append('name', document.getElementById('newNodeName').value); fd.append('ip', document.getElementById('newNodeIp').value); fd.append('user', document.getElementById('newNodeUser').value); fd.append('pass', document.getElementById('newNodePass').value); fd.append('type', document.getElementById('newNodeType').value); try { const res = await (await fetch('api.php?action=add_node', { method: 'POST', body: fd })).json(); if(res.success) { addNewNodeForm.reset(); window.toggleAddNodeForm(); window.loadNodesIntoTable(); window.loadSidebarNodes(); alert('Erfolgreich angebunden!'); } else alert(res.error); } catch(err) {} btn.innerText = oTxt; }); }
 
     window.openNodeTopology = async function() { const m = document.getElementById('nodeTopologyModal'); if(!m) return; m.classList.remove('hidden'); const container = document.getElementById('nodeTopologyContainer'); if(!container) return; container.innerHTML = '<div class="text-center text-gray-500 py-10 animate-pulse">Lade Cluster-Daten...</div>'; try { const [nodesRes, vmsRes] = await Promise.all([ fetch('api.php?action=get_nodes').then(r => r.json()), fetch('api.php?action=get_all_vms').then(r => r.json()) ]); if(nodesRes.success && vmsRes.success) { container.innerHTML = ''; const pveNodes = nodesRes.data.filter(n => n.type === 'pve'); if(pveNodes.length === 0) return; pveNodes.forEach(node => { const nodeVms = vmsRes.data.filter(v => v.node_id == node.id); let vmsHtml = ''; if(nodeVms.length > 0) { nodeVms.sort((a, b) => { if(a.status === 'running' && b.status !== 'running') return -1; if(a.status !== 'running' && b.status === 'running') return 1; return a.name.localeCompare(b.name); }); nodeVms.forEach(vm => { const icon = vm.type === 'lxc' ? '📦' : '🖥️'; const isRunning = vm.status === 'running'; const statusColor = isRunning ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-darkborder bg-darkcard text-gray-400'; const dot = isRunning ? '<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></span>' : '<span class="w-2 h-2 rounded-full bg-gray-600 shrink-0"></span>'; vmsHtml += `<div class="flex flex-col p-3 rounded-lg border ${statusColor} transition-transform hover:scale-[1.02]"><div class="flex items-center gap-2 mb-1">${dot}<span class="font-bold text-sm truncate" title="${vm.name}">${icon} ${vm.name}</span></div><div class="flex justify-between text-xs opacity-75"><span>ID: ${vm.vmid}</span><span>${vm.maxcpu || 1}C / ${formatBytes(vm.maxmem || 0)}</span></div></div>`; }); } container.innerHTML += `<div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><div class="flex justify-between items-center mb-4 border-b border-darkborder pb-3"><h3 class="text-lg font-bold text-white flex items-center gap-2"><svg class="w-5 h-5 text-proxmox" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>${node.name}</h3><div class="flex gap-3"><button onclick="window.openLiveGraph('node', 0, '${node.name}', ${node.id}, '${node.name}')" class="text-blue-400 hover:text-white transition-colors text-sm" title="Node Performance">📈 Live Graph</button><span class="text-xs font-bold text-gray-400 bg-darkbg px-3 py-1 rounded-full border border-darkborder">${node.ip_address}</span></div></div><div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">${vmsHtml}</div></div>`; }); } } catch(e) {} }
     window.closeNodeTopology = function() { const m = document.getElementById('nodeTopologyModal'); if(m) m.classList.add('hidden'); }
