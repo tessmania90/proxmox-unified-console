@@ -8,7 +8,7 @@ function formatDate(timestamp) { if (!timestamp || timestamp === 0) return 'Nie'
 async function logout() { await fetch('api.php?action=logout'); window.location.href = window.location.pathname + '?t=' + Date.now(); }
 
 // ---------------------------------------------------------
-// 2. GLOBALE VARIABLEN & CHARTS
+// 2. GLOBALE CHART OBJEKTE
 // ---------------------------------------------------------
 let liveChart = null;
 let liveNetChart = null;
@@ -68,7 +68,7 @@ if (!window.APP.isLoggedIn) {
 }
 
 // ---------------------------------------------------------
-// 4. MAIN APP LOGIC
+// 4. MAIN APP LOGIC (Dashboard, API Polling, Modals)
 // ---------------------------------------------------------
 if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     
@@ -154,7 +154,8 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         if(vmsBody) vmsBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-4 animate-pulse">Lade VMs...</td></tr>';
         
         try {
-            const res = await (await fetch(`api.php?action=get_node_dashboard&node_id=${nodeId}&host=${host}`)).json();
+            const response = await fetch(`api.php?action=get_node_dashboard&node_id=${nodeId}&host=${host}`);
+            const res = await response.json();
             if(res.success) {
                 if(storContainer) {
                     storContainer.innerHTML = '';
@@ -179,73 +180,73 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                     });
                 }
             }
-        } catch(e) {}
+        } catch(e) {
+            console.error("Node View Fetch Error:", e);
+        }
     }
 
-    // --- DASHBOARD API POLLING FUNKTIONEN ---
+    // --- NEU: ROBUSTE DASHBOARD API POLLING FUNKTIONEN ---
     window.fetchGlobalStats = async function() { 
         const tabEl = document.getElementById('tab-pve');
-        if(!tabEl || tabEl.classList.contains('hidden')) return; // Abbruch, wenn nicht im globalen Dashboard
+        if(!tabEl || tabEl.classList.contains('hidden')) return; 
         
         try { 
-            const res = await (await fetch('api.php?action=get_stats')).json(); 
-            if(res.success && res.data) { 
-                const d = res.data; 
-                const cpuText = document.getElementById('stat-cpu-text');
-                if(cpuText) cpuText.innerText = `${d.cpu_percent}% (${d.cpu_cores} Cores)`; 
-                
-                const cpuBar = document.getElementById('stat-cpu-bar');
-                if(cpuBar) cpuBar.style.width = `${d.cpu_percent}%`; 
-                
-                let ramPercent = (d.ram_used / d.ram_total) * 100 || 0; 
-                const ramText = document.getElementById('stat-ram-text');
-                if(ramText) ramText.innerText = `${formatBytes(d.ram_used)} / ${formatBytes(d.ram_total)}`; 
-                
-                const ramBar = document.getElementById('stat-ram-bar');
-                if(ramBar) ramBar.style.width = `${ramPercent}%`; 
-                
-                let diskPercent = (d.disk_used / d.disk_total) * 100 || 0; 
-                const diskText = document.getElementById('stat-disk-text');
-                if(diskText) diskText.innerText = `${formatBytes(d.disk_used)} / ${formatBytes(d.disk_total)}`; 
-                
-                const diskBar = document.getElementById('stat-disk-bar');
-                if(diskBar) diskBar.style.width = `${diskPercent}%`; 
-                
-                if (d.cluster_stats) {
-                    const elNodesOn = document.getElementById('stat-nodes-online');
-                    if (elNodesOn) { elNodesOn.innerText = d.cluster_stats.nodes_online; elNodesOn.className = (d.cluster_stats.nodes_online < d.cluster_stats.nodes_total) ? 'text-red-500' : 'text-green-500'; }
-                    const elNodesTotal = document.getElementById('stat-nodes-total');
-                    if(elNodesTotal) elNodesTotal.innerText = d.cluster_stats.nodes_total;
-                    const elVmsTotal = document.getElementById('stat-vms-total');
-                    if(elVmsTotal) elVmsTotal.innerText = d.cluster_stats.vms_total;
-                    const elVmsRun = document.getElementById('stat-vms-run');
-                    if(elVmsRun) elVmsRun.innerText = d.cluster_stats.vms_running;
-                    const elVmsStop = document.getElementById('stat-vms-stop');
-                    if(elVmsStop) elVmsStop.innerText = d.cluster_stats.vms_stopped;
-                }
-
-                if(liveChart) { 
-                    const now = new Date(); const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0'); 
-                    liveChart.data.labels.push(timeStr); liveChart.data.datasets[0].data.push(d.cpu_percent); liveChart.data.datasets[1].data.push(ramPercent.toFixed(1)); 
-                    if (liveChart.data.labels.length > 15) { liveChart.data.labels.shift(); liveChart.data.datasets[0].data.shift(); liveChart.data.datasets[1].data.shift(); } liveChart.update(); 
+            const response = await fetch('api.php?action=get_stats'); 
+            const text = await response.text(); // Lese erst als Text, um PHP Fehler abzufangen
+            
+            try {
+                const res = JSON.parse(text);
+                if(res.success && res.data) { 
+                    const d = res.data; 
+                    if(document.getElementById('stat-cpu-text')) document.getElementById('stat-cpu-text').innerText = `${d.cpu_percent}% (${d.cpu_cores} Cores)`; 
+                    if(document.getElementById('stat-cpu-bar')) document.getElementById('stat-cpu-bar').style.width = `${d.cpu_percent}%`; 
+                    let ramPercent = (d.ram_used / d.ram_total) * 100 || 0; 
+                    if(document.getElementById('stat-ram-text')) document.getElementById('stat-ram-text').innerText = `${formatBytes(d.ram_used)} / ${formatBytes(d.ram_total)}`; 
+                    if(document.getElementById('stat-ram-bar')) document.getElementById('stat-ram-bar').style.width = `${ramPercent}%`; 
+                    let diskPercent = (d.disk_used / d.disk_total) * 100 || 0; 
+                    if(document.getElementById('stat-disk-text')) document.getElementById('stat-disk-text').innerText = `${formatBytes(d.disk_used)} / ${formatBytes(d.disk_total)}`; 
+                    if(document.getElementById('stat-disk-bar')) document.getElementById('stat-disk-bar').style.width = `${diskPercent}%`; 
                     
-                    if(liveNetChart && d.nodes_net) { 
-                        const nowTs = Date.now(); 
-                        if (prevGlobalTime !== null) { 
-                            liveNetChart.data.labels.push(timeStr); if (liveNetChart.data.labels.length > 15) liveNetChart.data.labels.shift(); 
-                            const colors = ['#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4']; 
-                            d.nodes_net.forEach((n, idx) => { 
-                                let rxSpeed = n.netin / (1024 * 1024); let txSpeed = n.netout / (1024 * 1024); let totalSpeed = (rxSpeed + txSpeed).toFixed(2); 
-                                let ds = liveNetChart.data.datasets.find(ds => ds.label === n.name); 
-                                if (!ds) { const c = colors[idx % colors.length]; ds = { label: n.name, borderColor: c, backgroundColor: c + '1a', borderWidth: 2, tension: 0.4, fill: true, data: new Array(Math.max(0, liveNetChart.data.labels.length - 1)).fill(0) }; liveNetChart.data.datasets.push(ds); } 
-                                ds.data.push(totalSpeed); if (ds.data.length > 15) ds.data.shift(); 
-                            }); 
-                            liveNetChart.update(); 
-                        } prevGlobalTime = nowTs; 
-                    } 
-                }
-            } 
-        } catch (err) {} 
+                    if (d.cluster_stats) {
+                        const elNodesOn = document.getElementById('stat-nodes-online');
+                        if (elNodesOn) { elNodesOn.innerText = d.cluster_stats.nodes_online; elNodesOn.className = (d.cluster_stats.nodes_online < d.cluster_stats.nodes_total) ? 'text-red-500' : 'text-green-500'; }
+                        if(document.getElementById('stat-nodes-total')) document.getElementById('stat-nodes-total').innerText = d.cluster_stats.nodes_total;
+                        if(document.getElementById('stat-vms-total')) document.getElementById('stat-vms-total').innerText = d.cluster_stats.vms_total;
+                        if(document.getElementById('stat-vms-run')) document.getElementById('stat-vms-run').innerText = d.cluster_stats.vms_running;
+                        if(document.getElementById('stat-vms-stop')) document.getElementById('stat-vms-stop').innerText = d.cluster_stats.vms_stopped;
+                    }
+
+                    if(liveChart) { 
+                        const now = new Date(); const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0'); 
+                        liveChart.data.labels.push(timeStr); liveChart.data.datasets[0].data.push(d.cpu_percent); liveChart.data.datasets[1].data.push(ramPercent.toFixed(1)); 
+                        if (liveChart.data.labels.length > 15) { liveChart.data.labels.shift(); liveChart.data.datasets[0].data.shift(); liveChart.data.datasets[1].data.shift(); } liveChart.update(); 
+                        
+                        if(liveNetChart && d.nodes_net) { 
+                            const nowTs = Date.now(); 
+                            if (prevGlobalTime !== null) { 
+                                liveNetChart.data.labels.push(timeStr); if (liveNetChart.data.labels.length > 15) liveNetChart.data.labels.shift(); 
+                                const colors = ['#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4']; 
+                                d.nodes_net.forEach((n, idx) => { 
+                                    let rxSpeed = n.netin / (1024 * 1024); let txSpeed = n.netout / (1024 * 1024); let totalSpeed = (rxSpeed + txSpeed).toFixed(2); 
+                                    let ds = liveNetChart.data.datasets.find(ds => ds.label === n.name); 
+                                    if (!ds) { const c = colors[idx % colors.length]; ds = { label: n.name, borderColor: c, backgroundColor: c + '1a', borderWidth: 2, tension: 0.4, fill: true, data: new Array(Math.max(0, liveNetChart.data.labels.length - 1)).fill(0) }; liveNetChart.data.datasets.push(ds); } 
+                                    ds.data.push(totalSpeed); if (ds.data.length > 15) ds.data.shift(); 
+                                }); 
+                                liveNetChart.update(); 
+                            } prevGlobalTime = nowTs; 
+                        } 
+                    }
+                } 
+            } catch (parseErr) {
+                console.error("PHP Error in fetchGlobalStats:", text);
+                const el = document.getElementById('stat-cpu-text');
+                if(el && el.innerText.includes('Lade')) el.innerText = 'PHP Fehler';
+            }
+        } catch (err) {
+            console.error("Network/Adblock Error:", err);
+            const el = document.getElementById('stat-cpu-text');
+            if(el && el.innerText.includes('Lade')) el.innerText = 'Blockiert!';
+        } 
     }
 
     window.fetchTopVms = async function() { 
@@ -254,32 +255,52 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         if(!container || !tabEl || tabEl.classList.contains('hidden')) return; 
         
         try { 
-            const res = await (await fetch('api.php?action=get_top_vms')).json(); 
-            if(res.success && res.data) { 
-                container.innerHTML = ''; 
-                if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktiven VMs.</p>'; return; } 
-                res.data.forEach((vm, i) => { 
-                    const cpuPercent = ((vm.cpu || 0) * 100).toFixed(1); const ramUsed = formatBytes(vm.mem || 0); const icon = vm.type === 'lxc' ? '📦' : '🖥️'; const numberColor = i === 0 ? 'text-red-500' : (i === 1 ? 'text-orange-400' : (i === 2 ? 'text-yellow-400' : 'text-gray-400')); 
-                    container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-transform hover:scale-[1.02] cursor-default"><div class="flex items-center gap-3"><span class="font-bold text-xl ${numberColor}">#${i + 1}</span><div><h4 class="text-white font-semibold text-sm truncate w-32">${icon} ${vm.name}</h4><p class="text-xs text-gray-500">Host: ${vm.host}</p></div></div><div class="text-right"><p class="text-proxmox font-bold text-sm">${cpuPercent}% CPU</p><p class="text-xs text-gray-400">${ramUsed} RAM</p></div></div>`; 
-                }); 
-            } 
-        } catch (err) {} 
+            const response = await fetch('api.php?action=get_top_vms');
+            const text = await response.text();
+            try {
+                const res = JSON.parse(text); 
+                if(res.success && res.data) { 
+                    container.innerHTML = ''; 
+                    if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktiven VMs.</p>'; return; } 
+                    res.data.forEach((vm, i) => { 
+                        const cpuPercent = ((vm.cpu || 0) * 100).toFixed(1); const ramUsed = formatBytes(vm.mem || 0); const icon = vm.type === 'lxc' ? '📦' : '🖥️'; const numberColor = i === 0 ? 'text-red-500' : (i === 1 ? 'text-orange-400' : (i === 2 ? 'text-yellow-400' : 'text-gray-400')); 
+                        container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-transform hover:scale-[1.02] cursor-default"><div class="flex items-center gap-3"><span class="font-bold text-xl ${numberColor}">#${i + 1}</span><div><h4 class="text-white font-semibold text-sm truncate w-32">${icon} ${vm.name}</h4><p class="text-xs text-gray-500">Host: ${vm.host}</p></div></div><div class="text-right"><p class="text-proxmox font-bold text-sm">${cpuPercent}% CPU</p><p class="text-xs text-gray-400">${ramUsed} RAM</p></div></div>`; 
+                    }); 
+                } 
+            } catch (parseErr) {
+                console.error("PHP Error in fetchTopVms:", text);
+                container.innerHTML = '<p class="text-red-500 text-sm">PHP Fehler! (Siehe Konsole)</p>';
+            }
+        } catch (err) {
+            console.error("Network/Adblock Error (fetchTopVms):", err);
+            container.innerHTML = '<p class="text-red-500 text-sm">Netzwerk blockiert! (Adblocker?)</p>';
+        } 
     }
 
     window.fetchRecentJobs = async function() { 
         const container = document.getElementById('recent-jobs-container');
         if(!container) return; 
         try { 
-            const res = await (await fetch('api.php?action=get_recent_jobs')).json(); 
-            if(res.success && res.data) { 
-                container.innerHTML = ''; 
-                if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktuellen Jobs.</p>'; return; } 
-                res.data.forEach(job => { 
-                    const jobTypeStr = job.type || job.worker_type || 'unknown'; let statusColor = 'text-gray-400', statusIcon = '⏳', statusText = job.status || 'running...'; if(statusText.toLowerCase() === 'ok') { statusColor = 'text-green-500'; statusIcon = '✅'; } else if(statusText !== 'running...') { statusColor = 'text-red-500'; statusIcon = '❌'; } else { statusColor = 'text-blue-400'; statusIcon = '🔄'; } const date = new Date(job.starttime * 1000); const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }), dateStr = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); const isBackup = jobTypeStr.includes('sync') || jobTypeStr.includes('prune') || jobTypeStr.includes('garbage_collection') || jobTypeStr.includes('vzdump') || jobTypeStr.includes('verify'); const jobTypeColor = isBackup ? 'text-purple-400' : 'text-white'; 
-                    container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-colors hover:bg-darkborder/50"><div class="flex items-center gap-3"><div class="text-lg">${statusIcon}</div><div class="max-w-[120px]"><p class="${jobTypeColor} font-medium text-sm capitalize truncate" title="${jobTypeStr}">${jobTypeStr}</p><p class="text-xs text-gray-500 truncate" title="${job.node_name}">Host: <span class="text-proxmox">${job.node_name}</span></p></div></div><div class="text-right"><p class="${statusColor} font-bold text-sm uppercase">${statusText}</p><p class="text-xs text-gray-500">${dateStr} - ${timeStr}</p></div></div>`; 
-                }); 
-            } 
-        } catch (err) {} 
+            const response = await fetch('api.php?action=get_recent_jobs');
+            const text = await response.text();
+            try {
+                const res = JSON.parse(text); 
+                if(res.success && res.data) { 
+                    container.innerHTML = ''; 
+                    if(res.data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">Keine aktuellen Jobs.</p>'; return; } 
+                    res.data.forEach(job => { 
+                        const jobTypeStr = job.type || job.worker_type || 'unknown'; let statusColor = 'text-gray-400', statusIcon = '⏳', statusText = job.status || 'running...'; if(statusText.toLowerCase() === 'ok') { statusColor = 'text-green-500'; statusIcon = '✅'; } else if(statusText !== 'running...') { statusColor = 'text-red-500'; statusIcon = '❌'; } else { statusColor = 'text-blue-400'; statusIcon = '🔄'; } const date = new Date(job.starttime * 1000); const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }), dateStr = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); const isBackup = jobTypeStr.includes('sync') || jobTypeStr.includes('prune') || jobTypeStr.includes('garbage_collection') || jobTypeStr.includes('vzdump') || jobTypeStr.includes('verify'); const jobTypeColor = isBackup ? 'text-purple-400' : 'text-white'; 
+                        container.innerHTML += `<div class="bg-darkbg border border-darkborder rounded-lg p-3 flex justify-between items-center transition-colors hover:bg-darkborder/50"><div class="flex items-center gap-3"><div class="text-lg">${statusIcon}</div><div class="max-w-[120px]"><p class="${jobTypeColor} font-medium text-sm capitalize truncate" title="${jobTypeStr}">${jobTypeStr}</p><p class="text-xs text-gray-500 truncate" title="${job.node_name}">Host: <span class="text-proxmox">${job.node_name}</span></p></div></div><div class="text-right"><p class="${statusColor} font-bold text-sm uppercase">${statusText}</p><p class="text-xs text-gray-500">${dateStr} - ${timeStr}</p></div></div>`; 
+                    }); 
+                }
+            } catch (parseErr) {
+                console.error("PHP Error in fetchRecentJobs:", text);
+                container.innerHTML = '<p class="text-red-500 text-sm">PHP Fehler! (Siehe Konsole)</p>';
+            }
+        } catch (err) {
+            console.error("Network/Adblock Error (fetchRecentJobs):", err);
+            container.innerHTML = '<p class="text-red-500 text-sm">Netzwerk blockiert! (Adblocker?)</p>';
+        } 
     }
 
     // --- GRAPHS & MODALS ---
@@ -505,6 +526,16 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         } catch (e) {} 
     }
     window.closeVmSettings = function() { const m = document.getElementById('vmSettingsModal'); if(m) m.classList.add('hidden'); }
+    window.saveHardwareSettings = async function() { 
+        const fd = new FormData(); 
+        fd.append('vmid', document.getElementById('setVmid').value); fd.append('host', document.getElementById('setHost').value); fd.append('type', document.getElementById('setType').value); fd.append('node_id', document.getElementById('setNodeId').value); 
+        fd.append('memory', document.getElementById('setMemory').value); fd.append('cores', document.getElementById('setCores').value); 
+        fd.append('onboot', document.getElementById('setOnboot').checked ? 1 : 0);
+        if(document.getElementById('setType').value === 'qemu') { fd.append('ide2', document.getElementById('setIso').value); }
+        
+        const res = await (await fetch('api.php?action=update_vm_config', { method: 'POST', body: fd })).json(); 
+        if(res.success) { alert('Gespeichert!'); if(window.currentSelectedHost) window.openNodeView(fd.get('node_id'), fd.get('host')); } else alert(res.error); 
+    }
 
     window.sendVmCommand = async function(vmid, host, type, cmd, nodeId) { 
         if(!confirm(`Maschine '${vmid}' wirklich ${cmd}?`)) return; 
@@ -592,10 +623,10 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
             } 
         } catch (err) {}
     }
-    window.deleteNode = async function(id, name) { if(!confirm(`Server '${name}' löschen?`)) return; const fd = new FormData(); fd.append('id', id); await fetch('api.php?action=delete_node', { method: 'POST', body: fd }); window.loadNodesIntoTable(); window.loadSidebarNodes(); }
+    window.deleteNode = async function(id, name) { if(!confirm(`Server '${name}' löschen?`)) return; const fd = new FormData(); fd.append('id', id); await fetch('api.php?action=delete_node', { method: 'POST', body: fd }); window.loadNodesIntoTable(); loadSidebarNodes(); }
     
     const addNewNodeForm = document.getElementById('addNewNodeForm');
-    if(addNewNodeForm) { addNewNodeForm.addEventListener('submit', async function(e) { e.preventDefault(); const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Verbinde...'; const fd = new FormData(); fd.append('name', document.getElementById('newNodeName').value); fd.append('ip', document.getElementById('newNodeIp').value); fd.append('user', document.getElementById('newNodeUser').value); fd.append('pass', document.getElementById('newNodePass').value); fd.append('type', document.getElementById('newNodeType').value); try { const res = await (await fetch('api.php?action=add_node', { method: 'POST', body: fd })).json(); if(res.success) { addNewNodeForm.reset(); window.toggleAddNodeForm(); window.loadNodesIntoTable(); window.loadSidebarNodes(); alert('Erfolgreich angebunden!'); } else alert(res.error); } catch(err) {} btn.innerText = oTxt; }); }
+    if(addNewNodeForm) { addNewNodeForm.addEventListener('submit', async function(e) { e.preventDefault(); const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Verbinde...'; const fd = new FormData(); fd.append('name', document.getElementById('newNodeName').value); fd.append('ip', document.getElementById('newNodeIp').value); fd.append('user', document.getElementById('newNodeUser').value); fd.append('pass', document.getElementById('newNodePass').value); fd.append('type', document.getElementById('newNodeType').value); try { const res = await (await fetch('api.php?action=add_node', { method: 'POST', body: fd })).json(); if(res.success) { addNewNodeForm.reset(); window.toggleAddNodeForm(); window.loadNodesIntoTable(); loadSidebarNodes(); alert('Erfolgreich angebunden!'); } else alert(res.error); } catch(err) {} btn.innerText = oTxt; }); }
 
     window.openNodeTopology = async function() { const m = document.getElementById('nodeTopologyModal'); if(!m) return; m.classList.remove('hidden'); const container = document.getElementById('nodeTopologyContainer'); if(!container) return; container.innerHTML = '<div class="text-center text-gray-500 py-10 animate-pulse">Lade Cluster-Daten...</div>'; try { const [nodesRes, vmsRes] = await Promise.all([ fetch('api.php?action=get_nodes').then(r => r.json()), fetch('api.php?action=get_all_vms').then(r => r.json()) ]); if(nodesRes.success && vmsRes.success) { container.innerHTML = ''; const pveNodes = nodesRes.data.filter(n => n.type === 'pve'); if(pveNodes.length === 0) return; pveNodes.forEach(node => { const nodeVms = vmsRes.data.filter(v => v.node_id == node.id); let vmsHtml = ''; if(nodeVms.length > 0) { nodeVms.sort((a, b) => { if(a.status === 'running' && b.status !== 'running') return -1; if(a.status !== 'running' && b.status === 'running') return 1; return a.name.localeCompare(b.name); }); nodeVms.forEach(vm => { const icon = vm.type === 'lxc' ? '📦' : '🖥️'; const isRunning = vm.status === 'running'; const statusColor = isRunning ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-darkborder bg-darkcard text-gray-400'; const dot = isRunning ? '<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></span>' : '<span class="w-2 h-2 rounded-full bg-gray-600 shrink-0"></span>'; vmsHtml += `<div class="flex flex-col p-3 rounded-lg border ${statusColor} transition-transform hover:scale-[1.02]"><div class="flex items-center gap-2 mb-1">${dot}<span class="font-bold text-sm truncate" title="${vm.name}">${icon} ${vm.name}</span></div><div class="flex justify-between text-xs opacity-75"><span>ID: ${vm.vmid}</span><span>${vm.maxcpu || 1}C / ${formatBytes(vm.maxmem || 0)}</span></div></div>`; }); } container.innerHTML += `<div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><div class="flex justify-between items-center mb-4 border-b border-darkborder pb-3"><h3 class="text-lg font-bold text-white flex items-center gap-2"><svg class="w-5 h-5 text-proxmox" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>${node.name}</h3><div class="flex gap-3"><button onclick="window.openLiveGraph('node', 0, '${node.name}', ${node.id}, '${node.name}')" class="text-blue-400 hover:text-white transition-colors text-sm" title="Node Performance">📈 Live Graph</button><span class="text-xs font-bold text-gray-400 bg-darkbg px-3 py-1 rounded-full border border-darkborder">${node.ip_address}</span></div></div><div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">${vmsHtml}</div></div>`; }); } } catch(e) {} }
     window.closeNodeTopology = function() { const m = document.getElementById('nodeTopologyModal'); if(m) m.classList.add('hidden'); }
