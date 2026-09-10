@@ -42,10 +42,10 @@ Built entirely with native APIs—no slow iframes, no CORS issues.
 
 ## 📦 Quickstart (Docker & Portainer)
 
-Die Installation erfolgt am einfachsten über Docker Compose. Die Applikation bringt einen eigenen Apache-Webserver mit und generiert sich automatisch ein SSL-Zertifikat für HTTPS.
+The easiest way to install PUC is via Docker Compose. The application comes with its own Apache web server and automatically generates a self-signed SSL certificate for HTTPS access.
 
-**1. `docker-compose.yml` anlegen:**
-```yaml
+**1. Create a `docker-compose.yml`:**
+
 version: '3.8'
 
 services:
@@ -60,40 +60,38 @@ services:
       - ./data:/var/www/data
     environment:
       - TZ=Europe/Berlin
-```
-2. Starten:
-```
-Bash
+
+**2. Start the container:**
 
 docker compose up -d
-```
-3. ⚠️ WICHTIG: Rechte für SQLite anpassen:
-Da der Container als Benutzer www-data (UID 33) läuft, der neu erstellte Volume-Ordner auf dem Host aber oft root gehört, muss dem Ordner die Schreibberechtigung erteilt werden. Führe im Verzeichnis der Compose-Datei aus:
-Bash
-```
+
+**3. ⚠️ IMPORTANT: Fix SQLite Permissions:**
+Since the container runs as the `www-data` user (UID 33) for security reasons, and the newly created `./data` volume folder is usually owned by `root` on the host, you need to grant write permissions. Run this in the directory of your compose file:
+
 sudo chown -R 33:33 ./data
 sudo chmod -R 775 ./data
-```
-4. Login:
-Rufe https://<DEINE-IP>:8443 in deinem Browser auf (Zertifikatswarnung ignorieren).
 
-    Benutzername: admin
+**4. Login:**
+Open `https://<YOUR-IP>:8443` in your browser (ignore the self-signed certificate warning).
 
-    Passwort: admin (Bitte direkt nach dem Einloggen oben rechts über das 🔑-Symbol ändern!)
+* **Username:** `admin`
+* **Password:** `admin` *(Please change this immediately after logging in by clicking the 🔑 icon in the top right corner!)*
 
-🛠️ Architecture
+---
 
-    Backend: PHP 8.2 with a custom, modular API Router (api_pve.php, api_pbs.php, api_pmg.php).
+## 🛠️ Architecture
 
-    Database: SQLite (Stored securely in the mapped ./data volume).
+* **Backend:** PHP 8.2 with a custom, modular API Router (`api_pve.php`, `api_pbs.php`, `api_pmg.php`).
+* **Database:** SQLite (Stored securely in the mapped `./data` volume).
+* **Frontend:** Vanilla JavaScript + Tailwind CSS (Zero heavy build steps required).
+* **Environment:** Fully containerized via Docker and docker-compose.
 
-    Frontend: Vanilla JavaScript + Tailwind CSS (Zero heavy build steps required).
+---
 
-    Environment: Fully containerized via Docker and docker-compose.
-
-🤝 Contributing
+## 🤝 Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-📄 License
+
+## 📄 License
 
 MIT
