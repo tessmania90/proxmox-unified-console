@@ -68,7 +68,7 @@ if (!window.APP.isLoggedIn) {
 }
 
 // ---------------------------------------------------------
-// 4. MAIN APP LOGIC (Dashboard, API Polling, Modals)
+// 4. MAIN APP LOGIC
 // ---------------------------------------------------------
 if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     
@@ -120,6 +120,7 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
             } 
         });
         document.querySelectorAll('[id^="nav-node-"]').forEach(el => el.classList.remove('text-white', 'font-bold'));
+        if(tab === 'pve') { window.fetchGlobalStats(); window.fetchTopVms(); window.fetchRecentJobs(); }
         if(tab === 'pbs' && typeof window.fetchPbsStats === 'function') window.fetchPbsStats(); 
         if(tab === 'pmg' && typeof window.fetchPmgStats === 'function') window.fetchPmgStats();
     }
@@ -174,7 +175,7 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                     res.vms.forEach(vm => {
                         const isRunning = vm.status === 'running'; const typeStr = vm.type === 'lxc' ? '📦 LXC' : '🖥️ QEMU';
                         const statusBadge = isRunning ? '<span class="text-green-500 font-bold">Online</span>' : '<span class="text-red-500 font-bold">Offline</span>';
-                        let actionButtons = isRunning ? `<button onclick="window.sendVmCommand('${vm.vmid}', '${vm.host}', '${vm.type}', 'stop', ${vm.node_id})" class="text-red-500 hover:text-red-400 px-2 text-lg transition-colors">⏹️</button>` : `<button onclick="window.sendVmCommand('${vm.vmid}', '${vm.host}', '${vm.type}', 'start', ${vm.node_id})" class="text-green-500 hover:text-green-400 px-2 text-lg transition-colors">▶️</button>`;
+                        let actionButtons = isRunning ? `<button onclick="sendVmCommand('${vm.vmid}', '${vm.host}', '${vm.type}', 'stop', ${vm.node_id})" class="text-red-500 hover:text-red-400 px-2 text-lg transition-colors">⏹️</button>` : `<button onclick="sendVmCommand('${vm.vmid}', '${vm.host}', '${vm.type}', 'start', ${vm.node_id})" class="text-green-500 hover:text-green-400 px-2 text-lg transition-colors">▶️</button>`;
                         actionButtons += `<button onclick="window.openVmSettings('${vm.vmid}', '${vm.host}', '${vm.type}', ${vm.node_id}, '${vm.name}')" class="text-gray-400 hover:text-white px-2 ml-2 border-l border-darkborder text-lg transition-colors">⚙️</button>`;
                         vmsBody.innerHTML += `<tr class="border-b border-darkborder/50 hover:bg-darkbg transition-colors"><td class="py-2 px-3 text-white font-mono">${vm.vmid}</td><td class="py-2 px-3 text-white font-bold truncate max-w-[200px]">${vm.name}</td><td class="py-2 px-3 text-gray-400 whitespace-nowrap">${typeStr}</td><td class="py-2 px-3 whitespace-nowrap">${statusBadge}</td><td class="py-2 px-3 text-right whitespace-nowrap">${actionButtons}</td></tr>`;
                     });
@@ -185,14 +186,15 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         }
     }
 
-    // --- NEU: ROBUSTE DASHBOARD API POLLING FUNKTIONEN ---
+    // --- DASHBOARD API POLLING FUNKTIONEN ---
     window.fetchGlobalStats = async function() { 
         const tabEl = document.getElementById('tab-pve');
-        if(!tabEl || tabEl.classList.contains('hidden')) return; 
+        // REPARIERT: Nur abbrechen, wenn das Element definitiv existiert und die Klasse hidden hat
+        if(tabEl && tabEl.classList.contains('hidden')) return; 
         
         try { 
             const response = await fetch('api.php?action=get_stats'); 
-            const text = await response.text(); // Lese erst als Text, um PHP Fehler abzufangen
+            const text = await response.text(); 
             
             try {
                 const res = JSON.parse(text);
@@ -243,16 +245,14 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                 if(el && el.innerText.includes('Lade')) el.innerText = 'PHP Fehler';
             }
         } catch (err) {
-            console.error("Network/Adblock Error:", err);
-            const el = document.getElementById('stat-cpu-text');
-            if(el && el.innerText.includes('Lade')) el.innerText = 'Blockiert!';
+            console.error("Network Error fetchGlobalStats:", err);
         } 
     }
 
     window.fetchTopVms = async function() { 
         const container = document.getElementById('top-vms-container');
         const tabEl = document.getElementById('tab-pve');
-        if(!container || !tabEl || tabEl.classList.contains('hidden')) return; 
+        if(!container || (tabEl && tabEl.classList.contains('hidden'))) return; 
         
         try { 
             const response = await fetch('api.php?action=get_top_vms');
@@ -271,10 +271,7 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                 console.error("PHP Error in fetchTopVms:", text);
                 container.innerHTML = '<p class="text-red-500 text-sm">PHP Fehler! (Siehe Konsole)</p>';
             }
-        } catch (err) {
-            console.error("Network/Adblock Error (fetchTopVms):", err);
-            container.innerHTML = '<p class="text-red-500 text-sm">Netzwerk blockiert! (Adblocker?)</p>';
-        } 
+        } catch (err) {} 
     }
 
     window.fetchRecentJobs = async function() { 
@@ -297,10 +294,7 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                 console.error("PHP Error in fetchRecentJobs:", text);
                 container.innerHTML = '<p class="text-red-500 text-sm">PHP Fehler! (Siehe Konsole)</p>';
             }
-        } catch (err) {
-            console.error("Network/Adblock Error (fetchRecentJobs):", err);
-            container.innerHTML = '<p class="text-red-500 text-sm">Netzwerk blockiert! (Adblocker?)</p>';
-        } 
+        } catch (err) {} 
     }
 
     // --- GRAPHS & MODALS ---
@@ -650,4 +644,19 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     window.openUpdateManager = async function() { const m = document.getElementById('updateManagerModal'); if(m) m.classList.remove('hidden'); const content = document.getElementById('updateManagerContent'); if(!content) return; content.innerHTML = '<div class="text-center py-10 text-gray-500 animate-pulse">Prüfe Updates...</div>'; try { const res = await (await fetch('api.php?action=get_update_details')).json(); if (res.success) { content.innerHTML = ''; if(res.data.length === 0) { content.innerHTML = '<div class="text-center py-10 text-green-500 font-bold">🎉 Alle Systeme sind auf dem neuesten Stand!</div>'; return; } res.data.forEach(node => { let pkgsHtml = ''; node.packages.forEach(p => { pkgsHtml += `<div class="flex justify-between text-xs py-1 border-b border-darkborder/50"><span class="text-gray-300">${p.Title}</span><span class="text-gray-500">${p.OldVersion} ➔ <span class="text-proxmox">${p.Version}</span></span></div>`; }); content.innerHTML += `<div class="bg-darkcard border border-darkborder rounded-xl p-5 mb-4 shadow-lg"><div class="flex justify-between items-center mb-4 border-b border-darkborder pb-2"><h3 class="text-white font-bold flex items-center gap-2"><svg class="w-5 h-5 text-proxmox" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg> ${node.display_name} <span class="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded ml-2">${node.packages.length} Updates</span></h3><button onclick="window.triggerAptUpgrade(${node.node_id}, '${node.host}')" class="bg-proxmox hover:bg-orange-600 text-white font-bold py-1.5 px-4 rounded text-sm transition-colors">Installieren & Upgraden</button></div><div class="max-h-60 overflow-y-auto pr-2">${pkgsHtml}</div></div>`; }); } } catch(e) {} }
     window.closeUpdateManager = function() { const m = document.getElementById('updateManagerModal'); if(m) m.classList.add('hidden'); if(typeof window.fetchUpdates === 'function') window.fetchUpdates(); }
     window.triggerAptUpgrade = async function(nodeId, host) { if(!confirm(`Updates auf ${host} jetzt installieren?`)) return; const fd = new FormData(); fd.append('node_id', nodeId); fd.append('host', host); try { const res = await (await fetch('api.php?action=trigger_apt_upgrade', {method: 'POST', body: fd})).json(); if(res.success && res.upid) { window.openTaskLog(res.upid, nodeId, host); } else alert('Fehler: ' + res.error); } catch(e) {} }
+
+    // Initiale Intervall-Starts
+    setInterval(window.fetchGlobalStats, 10000); 
+    setInterval(window.fetchTopVms, 10000); 
+    setInterval(window.fetchRecentJobs, 15000); 
+    setInterval(window.fetchUpdates, 60000); 
+    setInterval(() => { if(typeof window.fetchPbsStats === 'function') window.fetchPbsStats(); }, 10000); 
+    setInterval(() => { if(typeof window.fetchPmgStats === 'function') window.fetchPmgStats(); }, 10000);
+
+    // Initiale Aufrufe, um das Dashboard sofort zu füllen
+    setTimeout(() => {
+        window.fetchGlobalStats();
+        window.fetchTopVms();
+        window.fetchRecentJobs();
+    }, 1000);
 }

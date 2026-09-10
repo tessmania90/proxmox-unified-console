@@ -2,6 +2,19 @@
 // /home/docker/pve_dashboard/src/api.php
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
+ini_set('log_errors', 1);
+ini_set('error_log', '/var/www/data/php_errors.log');
+
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    error_log("Error [$errno]: $errstr in $errfile on line $errline");
+});
+
+set_exception_handler(function($e) {
+    error_log("Exception: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'Backend Error: ' . $e->getMessage()]);
+    exit;
+});
 
 require_once 'db.php';
 header('Content-Type: application/json');
