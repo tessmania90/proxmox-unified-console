@@ -37,7 +37,6 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         });
     }
 
-    // NEU: Dynamische Sidebar für PVE Nodes
     async function loadSidebarNodes() {
         const container = document.getElementById('sidebar-pve-nodes'); if(!container) return;
         try {
@@ -64,31 +63,39 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                 if(nav) nav.classList.remove('tab-active', 'tab-active-pbs', 'tab-active-pmg'); 
             } 
         });
-        // Reset Sidebar Highlights for nodes
         document.querySelectorAll('[id^="nav-node-"]').forEach(el => el.classList.remove('text-white', 'font-bold'));
-        
         if(tab === 'pbs') fetchPbsStats(); if(tab === 'pmg') fetchPmgStats();
     }
 
-    // NEU: Node View (Spezifischer Host)
     window.openNodeView = async function(nodeId, host) {
         switchTab('node-view');
         document.querySelectorAll('[id^="nav-node-"]').forEach(el => el.classList.remove('text-white', 'font-bold'));
-        document.getElementById(`nav-node-${host}`).classList.add('text-white', 'font-bold');
-        document.getElementById('nodeViewTitle').innerText = 'Host: ' + host;
-        document.getElementById('nodeViewHeaderBtn').onclick = () => openLiveGraph('node', 0, host, nodeId, host);
-        document.getElementById('nodeViewBackupBtn').onclick = () => openNodeBackups(nodeId, host);
+        const activeNav = document.getElementById(`nav-node-${host}`);
+        if(activeNav) activeNav.classList.add('text-white', 'font-bold');
         
-        // Vorbelegung für "Neue VM" Modal
+        document.getElementById('nodeViewTitle').innerText = 'Host: ' + host;
+        
+        // REPARIERT: EventListener sauber binden, nicht überschreiben
+        const headerBtn = document.getElementById('nodeViewHeaderBtn');
+        const backupBtn = document.getElementById('nodeViewBackupBtn');
+        
+        // Remove old listeners by cloning
+        const newHeaderBtn = headerBtn.cloneNode(true);
+        headerBtn.parentNode.replaceChild(newHeaderBtn, headerBtn);
+        newHeaderBtn.addEventListener('click', () => openLiveGraph('node', 0, host, nodeId, host));
+
+        const newBackupBtn = backupBtn.cloneNode(true);
+        backupBtn.parentNode.replaceChild(newBackupBtn, backupBtn);
+        newBackupBtn.addEventListener('click', () => openNodeBackups(nodeId, host));
+        
         window.currentSelectedNodeId = nodeId; window.currentSelectedHost = host;
 
-        const storContainer = document.getElementById('nodeStoragesContainer'); storContainer.innerHTML = 'Lade...';
-        const vmsBody = document.getElementById('nodeVmsTableBody'); vmsBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-4">Lade VMs...</td></tr>';
+        const storContainer = document.getElementById('nodeStoragesContainer'); storContainer.innerHTML = '<div class="text-gray-500 animate-pulse">Lade Storages...</div>';
+        const vmsBody = document.getElementById('nodeVmsTableBody'); vmsBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-4 animate-pulse">Lade VMs...</td></tr>';
         
         try {
             const res = await (await fetch(`api.php?action=get_node_dashboard&node_id=${nodeId}&host=${host}`)).json();
             if(res.success) {
-                // Storages rendern
                 storContainer.innerHTML = '';
                 res.storages.forEach(st => {
                     const pct = st.total > 0 ? ((st.used / st.total) * 100).toFixed(1) : 0;
@@ -98,15 +105,14 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                         <div class="text-xs text-gray-500">${st.content}</div></div>`;
                 });
 
-                // VMs rendern
                 vmsBody.innerHTML = '';
                 if(res.vms.length === 0) vmsBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-4">Keine VMs auf diesem Host.</td></tr>';
                 res.vms.forEach(vm => {
                     const isRunning = vm.status === 'running'; const typeStr = vm.type === 'lxc' ? '📦 LXC' : '🖥️ QEMU';
                     const statusBadge = isRunning ? '<span class="text-green-500 font-bold">Online</span>' : '<span class="text-red-500 font-bold">Offline</span>';
-                    let actionButtons = isRunning ? `<button onclick="sendVmCommand('${vm.vmid}', '${vm.host}', '${vm.type}', 'stop', ${vm.node_id})" class="text-red-500 px-2">⏹️</button>` : `<button onclick="sendVmCommand('${vm.vmid}', '${vm.host}', '${vm.type}', 'start', ${vm.node_id})" class="text-green-500 px-2">▶️</button>`;
-                    actionButtons += `<button onclick="openVmSettings('${vm.vmid}', '${vm.host}', '${vm.type}', ${vm.node_id}, '${vm.name}')" class="text-gray-400 hover:text-white px-2 ml-2 border-l border-darkborder">⚙️</button>`;
-                    vmsBody.innerHTML += `<tr class="border-b border-darkborder/50 hover:bg-darkbg"><td class="py-2 px-3 text-white">${vm.vmid}</td><td class="py-2 px-3 text-white font-bold">${vm.name}</td><td class="py-2 px-3 text-gray-400">${typeStr}</td><td class="py-2 px-3">${statusBadge}</td><td class="py-2 px-3 text-right">${actionButtons}</td></tr>`;
+                    let actionButtons = isRunning ? `<button onclick="sendVmCommand('${vm.vmid}', '${vm.host}', '${vm.type}', 'stop', ${vm.node_id})" class="text-red-500 hover:text-red-400 px-2 text-lg transition-colors">⏹️</button>` : `<button onclick="sendVmCommand('${vm.vmid}', '${vm.host}', '${vm.type}', 'start', ${vm.node_id})" class="text-green-500 hover:text-green-400 px-2 text-lg transition-colors">▶️</button>`;
+                    actionButtons += `<button onclick="openVmSettings('${vm.vmid}', '${vm.host}', '${vm.type}', ${vm.node_id}, '${vm.name}')" class="text-gray-400 hover:text-white px-2 ml-2 border-l border-darkborder text-lg transition-colors">⚙️</button>`;
+                    vmsBody.innerHTML += `<tr class="border-b border-darkborder/50 hover:bg-darkbg transition-colors"><td class="py-2 px-3 text-white font-mono">${vm.vmid}</td><td class="py-2 px-3 text-white font-bold truncate max-w-[200px]">${vm.name}</td><td class="py-2 px-3 text-gray-400 whitespace-nowrap">${typeStr}</td><td class="py-2 px-3 whitespace-nowrap">${statusBadge}</td><td class="py-2 px-3 text-right whitespace-nowrap">${actionButtons}</td></tr>`;
                 });
             }
         } catch(e) {}
@@ -120,7 +126,7 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
 
     let prevGlobalTime = null;
     async function fetchGlobalStats() { 
-        if(document.getElementById('tab-pve').classList.contains('hidden')) return;
+        if(document.getElementById('tab-pve') && document.getElementById('tab-pve').classList.contains('hidden')) return;
         try { 
             const res = await (await fetch('api.php?action=get_stats')).json(); 
             if(res.success && res.data) { 
@@ -176,12 +182,12 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     window.closeNodeManager = function() { nodeModal.classList.add('hidden'); document.getElementById('addNodeFormContainer').classList.add('hidden'); }
     window.toggleAddNodeForm = function() { document.getElementById('addNodeFormContainer').classList.toggle('hidden'); }
     async function loadNodesIntoTable() { try { const res = await (await fetch('api.php?action=get_nodes')).json(); if(res.success) { const tbody = document.getElementById('nodeTableBody'); tbody.innerHTML = ''; if(res.data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center">Keine Server.</td></tr>'; return; } res.data.forEach(node => { let typeBadge = node.type === 'pbs' ? '<span class="bg-purple-500/20 text-pbs px-2 py-0.5 rounded text-xs font-bold">PBS Backup</span>' : (node.type === 'pmg' ? '<span class="bg-blue-500/20 text-pmg px-2 py-0.5 rounded text-xs font-bold">PMG Mail</span>' : '<span class="bg-proxmox/20 text-proxmox px-2 py-0.5 rounded text-xs font-bold">PVE Node</span>'); tbody.innerHTML += `<tr class="hover:bg-darkcard/50 transition-colors"><td class="px-4 py-3 font-medium text-white">${node.name}</td><td class="px-4 py-3">${typeBadge}</td><td class="px-4 py-3">${node.ip_address}</td><td class="px-4 py-3 text-right"><button onclick="deleteNode(${node.id}, '${node.name}')" class="text-red-500 hover:text-red-400 text-sm font-medium">Löschen</button></td></tr>`; }); } } catch (err) {} }
-    window.deleteNode = async function(id, name) { if(!confirm(`Server '${name}' löschen?`)) return; const fd = new FormData(); fd.append('id', id); await fetch('api.php?action=delete_node', { method: 'POST', body: fd }); loadNodesIntoTable(); }
+    window.deleteNode = async function(id, name) { if(!confirm(`Server '${name}' löschen?`)) return; const fd = new FormData(); fd.append('id', id); await fetch('api.php?action=delete_node', { method: 'POST', body: fd }); loadNodesIntoTable(); loadSidebarNodes(); }
     
     const addNewNodeForm = document.getElementById('addNewNodeForm');
     if(addNewNodeForm) { addNewNodeForm.addEventListener('submit', async function(e) { e.preventDefault(); const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Verbinde...'; const fd = new FormData(); fd.append('name', document.getElementById('newNodeName').value); fd.append('ip', document.getElementById('newNodeIp').value); fd.append('user', document.getElementById('newNodeUser').value); fd.append('pass', document.getElementById('newNodePass').value); fd.append('type', document.getElementById('newNodeType').value); try { const res = await (await fetch('api.php?action=add_node', { method: 'POST', body: fd })).json(); if(res.success) { addNewNodeForm.reset(); toggleAddNodeForm(); loadNodesIntoTable(); loadSidebarNodes(); alert('Erfolgreich angebunden!'); } else alert(res.error); } catch(err) {} btn.innerText = oTxt; }); }
 
-    // VM Erstellung (jetzt mit automatischer Node-Vorauswahl aus dem Sidebar-View)
+    // VM Erstellung
     const createVmModal = document.getElementById('createVmModal');
     window.openCreateVm = async function() { 
         createVmModal.classList.remove('hidden'); 
@@ -201,7 +207,7 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
     const createVmForm = document.getElementById('createVmForm');
     if(createVmForm) { createVmForm.addEventListener('submit', async function(e) { e.preventDefault(); const hostDataStr = document.getElementById('createVmHost').value; if(!hostDataStr) return; const hostData = JSON.parse(hostDataStr); const btn = this.querySelector('button[type="submit"]'); const oTxt = btn.innerText; btn.innerText = 'Richte VM ein...'; const fd = new FormData(); fd.append('node_id', hostData.id); fd.append('host', hostData.host); fd.append('name', document.getElementById('createVmName').value); fd.append('memory', document.getElementById('createVmRam').value); fd.append('cores', document.getElementById('createVmCores').value); try { const res = await (await fetch('api.php?action=create_vm', { method: 'POST', body: fd })).json(); if(res.success) { alert(`Erfolgreich! VM-ID: ${res.vmid}`); createVmForm.reset(); closeCreateVm(); if(window.currentSelectedHost === hostData.host) openNodeView(hostData.id, hostData.host); } else alert(res.error); } catch(e) {} finally { btn.innerText = oTxt; } }); }
 
-    // VM EDIT MODAL (Erweitert um ISO & OnBoot)
+    // VM EDIT MODAL
     const settingsModal = document.getElementById('vmSettingsModal');
     window.openVmSettings = async function(vmid, host, type, nodeId, name) { 
         settingsModal.classList.remove('hidden'); document.getElementById('settingsModalTitle').innerText = 'Einstellungen: ' + name; 
@@ -244,6 +250,8 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
         const res = await (await fetch('api.php?action=update_vm_config', { method: 'POST', body: fd })).json(); 
         if(res.success) { alert('Gespeichert!'); if(window.currentSelectedHost) openNodeView(fd.get('node_id'), fd.get('host')); } else alert(res.error); 
     }
+    window.saveNetwork = async function(disconnect) { let net = document.getElementById('setRawNet0').value; if (!net) return; if (disconnect) { if (!net.includes('link_down=1')) net += ',link_down=1'; } else { net = net.replace(',link_down=1', ''); } const fd = new FormData(); fd.append('vmid', document.getElementById('setVmid').value); fd.append('host', document.getElementById('setHost').value); fd.append('type', document.getElementById('setType').value); fd.append('node_id', document.getElementById('setNodeId').value); fd.append('net0', net); const res = await (await fetch('api.php?action=update_vm_config', { method: 'POST', body: fd })).json(); if(res.success) { alert('Netzwerkstatus geändert!'); openVmSettings(fd.get('vmid'), fd.get('host'), fd.get('type'), fd.get('node_id'), document.getElementById('settingsModalTitle').innerText.replace('Einstellungen: ', '')); } }
+    window.addNic = async function() { const bridge = document.getElementById('addNicBridge').value.trim(); if (!bridge) return; const fd = new FormData(); fd.append('vmid', document.getElementById('setVmid').value); fd.append('host', document.getElementById('setHost').value); fd.append('type', document.getElementById('setType').value); fd.append('node_id', document.getElementById('setNodeId').value); fd.append('bridge', bridge); try { const res = await (await fetch('api.php?action=add_vm_nic', { method: 'POST', body: fd })).json(); if(res.success) { alert(`Erfolgreich in Slot: ${res.slot}`); openVmSettings(fd.get('vmid'), fd.get('host'), fd.get('type'), fd.get('node_id'), document.getElementById('settingsModalTitle').innerText.replace('Einstellungen: ', '')); } else alert(res.error); } catch(e) {} }
 
     // Node Backups Manager
     window.openNodeBackups = async function(nodeId, host) {
@@ -261,7 +269,7 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
                         <td class="py-2 px-3 text-proxmox">${j.schedule || 'Manuell'}</td>
                         <td class="py-2 px-3">${j.storage}</td>
                         <td class="py-2 px-3 text-gray-400">${j.vmid || 'Alle VMs'}</td>
-                        <td class="py-2 px-3 text-right"><span class="text-xs bg-darkcard px-2 py-1 rounded">Read-Only via API</span></td>
+                        <td class="py-2 px-3 text-right"><span class="text-xs bg-darkcard px-2 py-1 rounded text-gray-500 border border-darkborder">Read-Only via API</span></td>
                     </tr>`;
                 });
             }
@@ -335,7 +343,9 @@ if (window.APP.isLoggedIn && window.APP.nodeCount > 0) {
 
     window.sendVmCommand = async function(vmid, host, type, cmd, nodeId) { if(!confirm(`Maschine '${vmid}' wirklich ${cmd}?`)) return; const fd = new FormData(); fd.append('vmid', vmid); fd.append('host', host); fd.append('type', type); fd.append('cmd', cmd); fd.append('node_id', nodeId); try { const res = await (await fetch('api.php?action=vm_action', { method: 'POST', body: fd })).json(); if(res.success) { setTimeout(() => { if(window.currentSelectedHost === host) openNodeView(nodeId, host); }, 2000); } else alert(res.error); } catch (err) {} }
     
-    // Bestehende Dummy-Funktionen für andere Module der Übersichtlichkeit halber:
-    window.openPmgManager = function() {} // Siehe original code
-    window.openPbsDatastore = function() {} // Siehe original code
+    // Platzhalter für Modals, die im Header aufgerufen werden
+    window.openUserManager = function() {} 
+    window.openPmgManager = function() {} 
+    window.openPbsDatastore = function() {} 
+    window.openNodeTopology = function() {}
 }

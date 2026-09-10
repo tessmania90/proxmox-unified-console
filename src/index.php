@@ -47,24 +47,23 @@ $nodeCount = $stmt->fetchColumn();
 
     <main class="flex-grow p-6 flex items-center justify-center max-w-[1600px] w-full mx-auto">
         <?php if (!$isLoggedIn): ?>
-            <!-- Login Form (Unverändert) -->
+            <!-- Login -->
             <div class="bg-darkcard border border-darkborder rounded-xl shadow-2xl p-8 max-w-sm w-full"><h2 class="text-2xl font-bold mb-2 text-center text-white">Login</h2><form id="loginForm" class="space-y-4"><div><label class="block text-sm font-medium text-gray-400 mb-1">Benutzer</label><input type="text" id="loginUser" class="w-full bg-darkbg border border-darkborder rounded p-2.5 text-white" required></div><div><label class="block text-sm font-medium text-gray-400 mb-1">Passwort</label><input type="password" id="loginPass" class="w-full bg-darkbg border border-darkborder rounded p-2.5 text-white" required></div><button type="submit" class="w-full bg-proxmox hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg mt-4">Einloggen</button></form></div>
         <?php elseif ($nodeCount == 0): ?>
-            <!-- Setup Form (Unverändert) -->
+            <!-- Setup -->
             <div class="bg-darkcard border border-darkborder rounded-xl shadow-2xl p-8 max-w-md w-full"><h2 class="text-2xl font-bold mb-2 text-white">Willkommen! 👋</h2><form id="setupForm" class="space-y-4"><div><label class="block text-sm font-medium text-gray-400 mb-1">Name</label><input type="text" id="nodeName" class="w-full bg-darkbg border border-darkborder rounded p-2.5 text-white" required></div><div><label class="block text-sm font-medium text-gray-400 mb-1">IP</label><input type="text" id="nodeIp" class="w-full bg-darkbg border border-darkborder rounded p-2.5 text-white" required></div><div><label class="block text-sm font-medium text-gray-400 mb-1">Benutzer</label><input type="text" id="nodeUser" value="root@pam" class="w-full bg-darkbg border border-darkborder rounded p-2.5 text-white" required></div><div><label class="block text-sm font-medium text-gray-400 mb-1">Passwort</label><input type="password" id="nodePass" class="w-full bg-darkbg border border-darkborder rounded p-2.5 text-white" required></div><button type="submit" class="w-full bg-proxmox text-white font-bold py-3 rounded-lg mt-6">Node verbinden</button></form></div>
         <?php else: ?>
             <div class="w-full h-[85vh] flex bg-darkbg overflow-hidden rounded-xl border border-darkborder shadow-2xl">
                 <!-- SIDEBAR -->
-                <aside class="w-64 bg-darkcard border-r border-darkborder flex flex-col">
+                <aside class="w-64 bg-darkcard border-r border-darkborder flex flex-col shrink-0">
                     <nav class="flex-1 overflow-y-auto space-y-2 py-4">
                         <div class="px-4 mb-2"><span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Cluster Übersicht</span></div>
                         <a href="#" id="nav-tab-pve" onclick="switchTab('pve')" class="tab-active flex items-center gap-3 text-gray-400 hover:text-white px-3 py-2 rounded-r-lg transition-colors">📊 PVE Cluster</a>
                         
-                        <!-- NEU: DYNAMISCHE PVE NODES -->
                         <div class="mt-4 border-t border-darkborder pt-4">
                             <div class="px-4 mb-2"><span class="text-xs font-bold text-gray-500 uppercase tracking-wider">PVE Nodes</span></div>
                             <div id="sidebar-pve-nodes" class="space-y-1">
-                                <!-- Nodes werden per JS geladen -->
+                                <!-- Nodes per JS -->
                             </div>
                         </div>
 
@@ -75,6 +74,8 @@ $nodeCount = $stmt->fetchColumn();
                         </div>
                     </nav>
                     <div class="p-4 border-t border-darkborder space-y-2 text-sm">
+                        <a href="#" onclick="openNodeTopology()" class="block text-gray-400 hover:text-white">Cluster Topologie</a>
+                        <a href="#" onclick="openVmManager()" class="block text-gray-400 hover:text-white">VMs verwalten</a>
                         <a href="#" onclick="openNodeManager()" class="block text-gray-400 hover:text-white">Server & API</a>
                         <?php if(($_SESSION['role'] ?? '') === 'admin'): ?>
                         <a href="#" onclick="openCronManager()" class="block text-gray-400 hover:text-white">Task Scheduler</a>
@@ -84,23 +85,42 @@ $nodeCount = $stmt->fetchColumn();
                 </aside>
 
                 <div class="flex-1 flex flex-col overflow-hidden relative">
-                    <main class="absolute inset-0 overflow-x-hidden overflow-y-auto bg-darkbg p-6 w-full">
+                    <main class="absolute inset-0 overflow-x-hidden overflow-y-auto bg-darkbg p-6 flex gap-6 w-full">
                         
                         <!-- TAB 1: PVE CLUSTER (Global) -->
-                        <div id="tab-pve" class="flex flex-col min-w-0 transition-opacity duration-300">
-                            <!-- [Alter Dashboard Inhalt bleibt unverändert erhalten - siehe app.js für injection] -->
+                        <div id="tab-pve" class="flex-1 flex flex-col min-w-0 transition-opacity duration-300">
+                            <!-- Top Kachel Cluster Status -->
+                            <div class="mb-6 bg-darkcard border border-darkborder rounded-xl p-6 shadow-lg flex flex-col md:flex-row justify-between items-center gap-6">
+                                <div class="flex items-center gap-4">
+                                    <div class="p-3 bg-blue-500/10 rounded-xl"><svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg></div>
+                                    <div><h2 class="text-xl font-bold text-white">Gesamtübersicht</h2><p class="text-gray-400 text-sm">Cluster & Standalone Nodes</p></div>
+                                </div>
+                                <div class="flex flex-wrap justify-center gap-6 md:gap-12">
+                                    <div class="text-center"><p class="text-gray-400 text-xs font-bold uppercase mb-1">Server (Nodes)</p><p class="text-2xl font-bold text-white"><span id="stat-nodes-online" class="text-green-500">0</span><span class="text-gray-600 mx-1">/</span><span id="stat-nodes-total" class="text-gray-300">0</span></p></div>
+                                    <div class="hidden md:block w-px bg-darkborder"></div>
+                                    <div class="text-center"><p class="text-gray-400 text-xs font-bold uppercase mb-1">Total VMs/LXC</p><p class="text-2xl font-bold text-white" id="stat-vms-total">0</p></div>
+                                    <div class="text-center"><p class="text-gray-400 text-xs font-bold uppercase mb-1">Online</p><p class="text-2xl font-bold text-green-500" id="stat-vms-run">0</p></div>
+                                    <div class="text-center"><p class="text-gray-400 text-xs font-bold uppercase mb-1">Offline</p><p class="text-2xl font-bold text-red-500" id="stat-vms-stop">0</p></div>
+                                </div>
+                            </div>
+
                             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                                 <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><p class="text-gray-400 text-sm font-medium">Cluster CPU Cores</p><h3 id="stat-cpu-text" class="text-2xl font-bold text-white mt-1">Lade...</h3><div class="w-full bg-darkbg rounded-full h-2 mt-4"><div id="stat-cpu-bar" class="bg-blue-500 h-2 rounded-full" style="width: 0%"></div></div></div>
                                 <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><p class="text-gray-400 text-sm font-medium">Globaler RAM</p><h3 id="stat-ram-text" class="text-2xl font-bold text-white mt-1">Lade...</h3><div class="w-full bg-darkbg rounded-full h-2 mt-4"><div id="stat-ram-bar" class="bg-proxmox h-2 rounded-full" style="width: 0%"></div></div></div>
                                 <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><p class="text-gray-400 text-sm font-medium">Datacenter Storage</p><h3 id="stat-disk-text" class="text-2xl font-bold text-white mt-1">Lade...</h3><div class="w-full bg-darkbg rounded-full h-2 mt-4"><div id="stat-disk-bar" class="bg-emerald-500 h-2 rounded-full" style="width: 0%"></div></div></div>
-                                <div onclick="openCreateVm()" class="bg-proxmox/10 border border-proxmox/30 hover:border-proxmox rounded-xl p-5 shadow-lg cursor-pointer flex flex-col items-center justify-center text-proxmox transition-colors">
-                                    <span class="text-3xl font-bold mb-1">+</span><span class="font-bold">Neue VM anlegen</span>
-                                </div>
+                                <div onclick="openCreateVm()" class="bg-proxmox/10 border border-proxmox/30 hover:border-proxmox rounded-xl p-5 shadow-lg cursor-pointer flex flex-col items-center justify-center text-proxmox transition-colors"><span class="text-3xl font-bold mb-1">+</span><span class="font-bold">Neue VM anlegen</span></div>
                             </div>
+
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                                <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg min-h-[300px] flex flex-col justify-center"><div class="flex justify-between items-center mb-4"><h3 class="text-white font-bold">Live Cluster Auslastung</h3><span class="text-xs text-gray-500 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> CPU / RAM</span></div><div class="relative h-full w-full min-h-[220px]"><canvas id="liveChart"></canvas></div></div>
+                                <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg min-h-[300px] flex flex-col justify-center"><div class="flex justify-between items-center mb-4"><h3 class="text-white font-bold">Live Netzwerk Traffic</h3><span class="text-xs text-gray-500 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> MB/s Total pro Node</span></div><div class="relative h-full w-full min-h-[220px]"><canvas id="liveNetChart"></canvas></div></div>
+                            </div>
+                            
+                            <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg"><h3 class="text-white font-bold mb-4">🔥 Top 5 Ressourcen-Fresser</h3><div id="top-vms-container" class="space-y-3"><p class="text-gray-400 text-sm">Lädt Live-Daten von Proxmox API...</p></div></div>
                         </div>
 
-                        <!-- NEU: TAB NODE VIEW -->
-                        <div id="tab-node-view" class="hidden opacity-0 flex flex-col min-w-0 transition-opacity duration-300">
+                        <!-- TAB NODE VIEW -->
+                        <div id="tab-node-view" class="hidden opacity-0 flex-1 flex flex-col min-w-0 transition-opacity duration-300">
                             <div class="flex justify-between items-center border-b border-darkborder pb-4 mb-6">
                                 <h2 id="nodeViewTitle" class="text-2xl font-bold text-white">Host: ...</h2>
                                 <div class="space-x-3">
@@ -111,20 +131,17 @@ $nodeCount = $stmt->fetchColumn();
                             </div>
 
                             <div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
-                                <!-- VMs auf dem Node -->
                                 <div class="xl:col-span-3 bg-darkcard border border-darkborder rounded-xl shadow-lg flex flex-col h-[600px]">
                                     <div class="p-4 border-b border-darkborder"><h3 class="text-white font-bold">Laufende & Gestoppte Maschinen</h3></div>
                                     <div class="overflow-y-auto flex-1">
                                         <table class="w-full text-left text-sm text-gray-400">
-                                            <thead class="bg-darkbg text-xs uppercase sticky top-0 border-b border-darkborder">
+                                            <thead class="bg-darkbg text-xs uppercase sticky top-0 border-b border-darkborder z-10">
                                                 <tr><th class="py-2 px-3">ID</th><th class="py-2 px-3">Name</th><th class="py-2 px-3">Typ</th><th class="py-2 px-3">Status</th><th class="py-2 px-3 text-right">Aktionen</th></tr>
                                             </thead>
                                             <tbody id="nodeVmsTableBody" class="divide-y divide-darkborder/50"></tbody>
                                         </table>
                                     </div>
                                 </div>
-
-                                <!-- Storages -->
                                 <div class="bg-darkcard border border-darkborder rounded-xl shadow-lg p-4 flex flex-col h-[600px]">
                                     <h3 class="text-white font-bold mb-4 border-b border-darkborder pb-2">💾 Storages</h3>
                                     <div id="nodeStoragesContainer" class="space-y-3 overflow-y-auto pr-2"></div>
@@ -132,16 +149,25 @@ $nodeCount = $stmt->fetchColumn();
                             </div>
                         </div>
 
-                        <!-- TAB PBS / PMG (Platzhalter für den bestehenden Code) -->
-                        <div id="tab-pbs" class="hidden opacity-0 flex flex-col min-w-0 transition-opacity duration-300">
+                        <!-- TAB PBS -->
+                        <div id="tab-pbs" class="hidden opacity-0 flex-1 flex flex-col min-w-0 transition-opacity duration-300">
                             <div class="mb-6 border-b border-darkborder pb-4"><h2 class="text-2xl font-bold text-white">Backup Datastores</h2></div>
-                            <div id="pbs-datastores-container" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
-                        </div>
-                        <div id="tab-pmg" class="hidden opacity-0 flex flex-col min-w-0 transition-opacity duration-300">
-                            <div class="mb-6 border-b border-darkborder pb-4"><h2 class="text-2xl font-bold text-white">Mail Gateway Status</h2></div>
-                            <div id="pmg-nodes-container" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+                            <div id="pbs-datastores-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
                         </div>
 
+                        <!-- TAB PMG -->
+                        <div id="tab-pmg" class="hidden opacity-0 flex-1 flex flex-col min-w-0 transition-opacity duration-300">
+                            <div class="mb-6 border-b border-darkborder pb-4"><h2 class="text-2xl font-bold text-white">Mail Gateway Status</h2></div>
+                            <div id="pmg-nodes-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+                        </div>
+
+                        <!-- RECHTS: JOBS (Immer sichtbar, es sei denn das Fenster ist zu schmal) -->
+                        <div class="w-80 shrink-0 flex flex-col hidden lg:flex">
+                            <div class="bg-darkcard border border-darkborder rounded-xl p-5 shadow-lg flex-1 overflow-y-auto">
+                                <h3 class="text-white font-bold mb-4 sticky top-0 bg-darkcard pb-2 border-b border-darkborder z-10">Letzte Jobs</h3>
+                                <div id="recent-jobs-container" class="space-y-3"><p class="text-gray-400 text-sm">Lädt Job-Historie...</p></div>
+                            </div>
+                        </div>
                     </main>
                 </div>
             </div>
